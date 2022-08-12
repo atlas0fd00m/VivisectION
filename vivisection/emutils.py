@@ -6,6 +6,7 @@ import time
 import uuid
 import psutil
 import select
+import string
 import struct
 import vtrace
 import platform
@@ -53,6 +54,8 @@ SNAP_SWAP = 3
 PEBSZ = 4096
 TEBSZ = 4096
 TLSSZ = 4096
+
+byteprintables = string.printable.encode('latin1')
 
 class TraceMonitor(vi_mon.AnalysisMonitor):
     def __init__(self, traces=None):
@@ -449,6 +452,17 @@ class EmuHeap:
         self.emu.writeMemory(newchunk, self.emu.readMemory(chunk, oldsize))
 
         return newchunk
+
+    def __contains__(self, va):
+        print("__contains__(%r)" % va)
+        for baseva, (size, allocpc) in list(self.tracker.items()):
+            if baseva <= va < baseva+size:
+                return True
+
+        return False
+
+    def __getattr__(self, va):
+        print("__getattr__(%r)" % va)
 
     def free(self, addr):
         self.freed[addr] = self.emu.getProgramCounter()
@@ -4291,6 +4305,28 @@ class NinjaEmulator:
         if resetSilent:
             self.silent = False
 
+    def reprNum(self, va, count=0, max=10):
+        if not self.emu.isValidPointer(va):
+            return hex(va)
+
+        val = self.emu.readMemoryPtr(va)
+        vbytes = self.emu.readMemory(va, self.vw.psize)
+
+        heap = self.getHeap()
+        heapstr = ''
+        if va in heap:
+            heapstr = "(heap) "
+
+        if not False in [vbyt in byteprintables for vbyt in vbytes]:
+            return '0x%x %s-> %r' % (va, heapstr, self.emu.readMemString(va).decode('latin1'))
+
+        elif self.emu.isValidPointer(val):
+            return '0x%x -> %r' % (va, self.reprNum(va, count+1, max=max))
+        
+        else:
+            return '0x%x %s-> %r' % (va, heapstr, self.emu.readMemory(va, 20).decode('latin1'))
+
+
     def runStep(self, maxstep=1000000, follow=True, showafter=True, runTil=None, pause=True, silent=False, finish=0, tracedict=None, bps=()):
         '''
         runStep is the core "debugging" functionality for this emulation-helper.  it's goal is to 
@@ -4512,7 +4548,9 @@ class NinjaEmulator:
                         uinp = input(prompt)
                         while len(uinp) and not (self.moveon or self.quit or self.emuBranch):
                             try:
-                                if uinp == "q":
+                                if uinp == "?":
+                                    print(cmdhelp)
+                                elif uinp == "q":
                                     self.quit = True
                                     break
 
@@ -4608,7 +4646,7 @@ class NinjaEmulator:
                                         memaddr = parseExpression(emu, addrstr)
 
                                         if len(tgt) > 1:
-                                            if tgt[-1] not in ('h', 'H', 's', 'S'):
+                                            if tgt[-1] in ('h', 'H', 's', 'S'):
                                                 size = None
                                             else:
                                                 size = parseExpression(emu, tgt[-1])
@@ -4629,6 +4667,7 @@ class NinjaEmulator:
 
                                         else:
                                             # write number
+                                            print("writing %d:%r to %x" % (parseExpression(emu, data), size, memaddr))
                                             emu.writeMemValue(memaddr, parseExpression(emu, data), size)
 
                                     else:
@@ -4694,7 +4733,8 @@ class NinjaEmulator:
                                                 out = "taint: %s: %s" % (taint[1], emu.reprVivTaint(taint))
                                         
                                         if type(out) == int:
-                                            print(hex(out))
+                                            print(self.reprNum(out))
+
                                         else:
                                             print(out)
                                     except KeyboardInterrupt:
@@ -4923,6 +4963,38 @@ class NinjaEmulator:
 
         for va, tva, data in self.emu.path[2].get('writelog'):
             insertComment(vw, va, "[W:%x] %r (%r)" % (tva, data.hex(), data))
+
+cmdhelp = """Commands:
+    q   - quit
+    silent <until_va> - don't print regs/mem/etc until we reach <until_va>
+    bt  - print backtrace from the stack
+    go (+<numinstrs> | <to_va>) - don't stop emulating until we reach to_va or emulate numinstrs
+    ni  - emulate until the next "fallthru" instruction (ie. thru func calls/etc)
+    b   - emulate until the next branch/call/return
+    stack [count] - print a dump of the stack (defaults to just the most recent)
+    heap  - print a dump of the Heap
+    malloc [size] - allocate a heap chunk and print the address to the console
+    refresh - reprint the current information (the instruction about to be emu'd, etc...)
+    pc=<va> - set the program counter to the provided address
+    skip   - don't emulate this instruction, move on.
+
+Accessing Emulator/Context Data
+    reg   - print the value of a given register
+    [reg] - print a pointer-sized memory piece that reg points to (in hex)
+    [reg+14] - print a pointer-sized memory piece that reg points to +14 bytes
+    [reg:22] - print 22 bytes (hex) from the memory location [reg] points to
+    [reg:s]  - print a string from the memory location [reg] points to
+    
+    reg=0xfooba - set the register to 0xfooba
+    [reg:16]=0xf00baf00ba123 - write 0xf00baf00ba123 to memory location pointed to by reg
+    [reg:s]='foobarbaz' - write the string 'foobarbaz' to location pointed to by reg
+    [reg]='foobarbaz' - also write string to [reg]
+
+Note: almost anywhere "reg" is written, an expression can be used (not "writing")
+    like [rax + 16:8] would return the memory pointed by rax+16, and 8 bytes 
+    would be returned in hex
+
+    """
 
 def readMemString(self, va, maxlen=0xfffffff, wide=False):
     '''

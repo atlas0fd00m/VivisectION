@@ -23,3 +23,7 @@ Maybe not for first release?
 
 * It will also glue debuggers together with Vivisect Server/Shared Workspace
 
+* Debugger attach, dump, and prep for Emulation
+    * Import VSNAP, convert to Emu
+    * Import GDB Core file, convert to Emu
+

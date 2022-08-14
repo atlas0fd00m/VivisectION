@@ -3637,8 +3637,8 @@ class LinuxKernel(Kernel):
 
         if self.emu.psize == 4:
             self.emu.setSegmentInfo(e_i386.SEG_FS, self.tlsbase, TLSSZ)
-        else:
-            self.emu.setSegmentInfo(e_i386.SEG_GS, self.tlsbase, TLSSZ)
+        #else:  # FIXME
+            #self.emu.setSegmentInfo(e_i386.SEG_GS, self.tlsbase, TLSSZ)
 
     def isFsCaseSensitive(self):
         return True

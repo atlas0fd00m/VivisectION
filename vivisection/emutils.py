@@ -9,6 +9,7 @@ import select
 import string
 import struct
 import vtrace
+import logging
 import platform
 import itertools
 import traceback
@@ -38,6 +39,8 @@ from atlasutils.errno import *
 from envi.expression import ExpressionFail
 from envi.const import MM_READ, MM_WRITE, MM_EXEC
 from vstruct.primitives import v_uint16, v_uint32, v_uint64
+
+logger = logging.getLogger(__name__)
 
 
 # TODO: break into modules  (eg.  emuwin, emulin, emuraw)
@@ -448,13 +451,13 @@ class EmuHeap:
         # FIXME: error here if not found....
         oldsize, oldaccess = self.tracker.get(chunk)
 
-        print("realloc: old: 0x%x  new: 0x%x      oldsize: 0x%x   newsize: 0x%x" % (chunk, newchunk, oldsize, size))
+        logger.info("realloc: old: 0x%x  new: 0x%x      oldsize: 0x%x   newsize: 0x%x" % (chunk, newchunk, oldsize, size))
         self.emu.writeMemory(newchunk, self.emu.readMemory(chunk, oldsize))
 
         return newchunk
 
     def __contains__(self, va):
-        print("__contains__(%r)" % va)
+        logger.info("__contains__(%r)" % va)
         for baseva, (size, allocpc) in list(self.tracker.items()):
             if baseva <= va < baseva+size:
                 return True
@@ -462,7 +465,7 @@ class EmuHeap:
         return False
 
     def __getattr__(self, va):
-        print("__getattr__(%r)" % va)
+        logger.info("__getattr__(%r)" % va)
 
     def free(self, addr):
         self.freed[addr] = self.emu.getProgramCounter()
@@ -571,7 +574,7 @@ def malloc(emu, op=None):
 
     heap = getHeap(emu)
     allocated_ptr = heap.malloc(size)
-    print("malloc(0x%x)  => 0x%x" % (size, allocated_ptr))
+    logger.info("malloc(0x%x)  => 0x%x" % (size, allocated_ptr))
 
     cconv.execCallReturn(emu, allocated_ptr, 0)
 
@@ -584,7 +587,7 @@ def calloc(emu, op=None):
 
     heap = getHeap(emu)
     allocated_ptr = heap.malloc(size * elements)
-    print("calloc(0x%x, 0x%x)  => 0x%x" % (elements, size, allocated_ptr))
+    logger.info("calloc(0x%x, 0x%x)  => 0x%x" % (elements, size, allocated_ptr))
 
     cconv.execCallReturn(emu, allocated_ptr, 0)
 
@@ -596,7 +599,7 @@ def free(emu, op=None):
     va, = cconv.getCallArgs(emu, 1)
     heap = getHeap(emu)
     heap.free(va)
-    print("FREE: 0x%x" % va)
+    logger.info("FREE: 0x%x" % va)
     cconv.execCallReturn(emu, 0, 0)
 
 def realloc(emu, op=None):
@@ -645,10 +648,10 @@ def syslog(emu, op=None):
 
     args = cconv.getCallArgs(emu, count+2)[2:]
     outstring = string % args
-    print("SYSLOG(%d): %s" % (loglvl, outstring))
+    logger.warning("SYSLOG(%d): %s" % (loglvl, outstring))
     for s in args:
         if emu.isValidPointer(s):
-            print("\t" + readString(emu, s))
+            logger.warning("\t" + readString(emu, s))
     cconv.execCallReturn(emu, 0, 0)
 
 def nop(emu, op=None):
@@ -660,7 +663,7 @@ def memset(emu, op=None):
 
     data = (b'%c' % char) * count
     emu.writeMemory(dest, data)
-    print("memset(%r, %r, %r) => %r" % (dest, char, count, data))
+    logger.info("memset(%r, %r, %r) => %r" % (dest, char, count, data))
     cconv.execCallReturn(emu, 0, 0)
     return data
 
@@ -670,7 +673,7 @@ def memcpy(emu, op=None):
 
     data = emu.readMemory(src, length)
     emu.writeMemory(dest, data)
-    print("memcpy(0x%x, 0x%x, 0x%x) => %r" % (dest, src, length, data))
+    logger.info("memcpy(0x%x, 0x%x, 0x%x) => %r" % (dest, src, length, data))
 
     cconv.execCallReturn(emu, dest, 0)
 
@@ -681,7 +684,7 @@ def memcpy_s(emu, op=None):
     dest, destlen, src, length = cconv.getCallArgs(emu, 4)
     data = emu.readMemory(src, length)
     emu.writeMemory(dest, data)
-    print(data)
+    logger.info(data)
     cconv.execCallReturn(emu, 0, 0) # 0 on success
 
     return data
@@ -691,7 +694,7 @@ def memmove_s(emu, op=None):
     dest, numelements, src, count = cconv.getCallArgs(emu, 4)
     data = emu.readMemory(src, count)
     emu.writeMemory(dest, data)
-    print(data)
+    logger.info(data)
     cconv.execCallReturn(emu, 0, 0) # 0 on success
 
     return data
@@ -704,7 +707,7 @@ def strncpy(emu, op=None):
     if nulloc != -1:
         data = data[:nulloc]
     emu.writeMemory(dest, data)
-    print(data)
+    logger.info(data)
     cconv.execCallReturn(emu, dest, 0)
     return data
 
@@ -727,7 +730,7 @@ def strncpy_s(emu, op=None):
         retval = STRUNCATE
 
     emu.writeMemory(dest, data)
-    print("strncpy_s(0x%x, %r)" % (dest, data))
+    logger.info("strncpy_s(0x%x, %r)" % (dest, data))
     cconv.execCallReturn(emu, retval, 0)
     return data
 
@@ -736,7 +739,7 @@ def strcpy(emu, op=None):
     dest, src = cconv.getCallArgs(emu, 2)
     data = readString(emu, src) + b'\0'
     emu.writeMemory(dest, data)
-    print("strncpy(0x%x, %r)" % (dest, data))
+    logger.info("strncpy(0x%x, %r)" % (dest, data))
     cconv.execCallReturn(emu, dest, 0)
     return data
 
@@ -746,7 +749,7 @@ def strcat(emu, op=None):
     initial = readString(emu, start)
     data = readString(emu, second)
     emu.writeMemory(start + len(initial) + b'\0', data)
-    print("strcat(0x%x, 0x%x)  => %r + %r" % (start, second, initial, data))
+    logger.info("strcat(0x%x, 0x%x)  => %r + %r" % (start, second, initial, data))
     cconv.execCallReturn(emu, dest, 0)
     return initial+data
 
@@ -757,7 +760,7 @@ def strncat(emu, op=None):
     data = readString(emu, second)[:max2]
     
     emu.writeMemory(start + len(initial), data)
-    print("strncat(0x%x, 0x%x, 0x%x)  => %r + %r" % (start, second, max2, initial, data))
+    logger.info("strncat(0x%x, 0x%x, 0x%x)  => %r + %r" % (start, second, max2, initial, data))
     cconv.execCallReturn(emu, dest, 0)
     return initial+data
 
@@ -771,15 +774,15 @@ def strncat_s(emu, op=None):
     writelen = destsz - initiallen
     
     emu.writeMemory(start + initiallen, data[:writelen])
-    print("strncat(0x%x, 0x%x, 0x%x, 0x%x)  => %r + %r" % (start, destsz, second, max2, initial, data))
+    logger.info("strncat(0x%x, 0x%x, 0x%x, 0x%x)  => %r + %r" % (start, destsz, second, max2, initial, data))
     cconv.execCallReturn(emu, 0, 0)
     return initial+data
 
 def strtok_s(emu, op=None):
-    print("strtok_s()")
+    logger.info("strtok_s()")
     ccname, cconv = getLibcCallConv(emu)
     strToken, strDelimit, pCtx = cconv.getCallArgs(emu, 3)
-    print("strtok_s(0x%x, 0x%x, 0x%x)" % (strToken, strDelimit, pCtx))
+    logger.info("strtok_s(0x%x, 0x%x, 0x%x)" % (strToken, strDelimit, pCtx))
 
     if strToken:
         # this is the first calling for this string
@@ -812,11 +815,11 @@ def strtok_s(emu, op=None):
     if initiallen:
         emu.writeMemoryPtr(pCtx, start+off)
         retval = start
-        print("strtok_s() %r  (%r) => %r" % (initial, delims, initial[:off]))
+        logger.info("strtok_s() %r  (%r) => %r" % (initial, delims, initial[:off]))
 
     else:
         retval = 0
-        print("strtok_s() -> end")
+        logger.info("strtok_s() -> end")
 
     cconv.execCallReturn(emu, retval, 0)
     return retval
@@ -833,7 +836,7 @@ def strstr(emu, op=None):
     else:
         retval = cstr + idx
     
-    print("strstr(%r, %r)" % (initial, searchstr))
+    logger.info("strstr(%r, %r)" % (initial, searchstr))
     cconv.execCallReturn(emu, retval, 0)
     return retval
 
@@ -847,7 +850,7 @@ def strchr(emu, op=None):
     else:
         retval = cstr + idx
     
-    print("strchr(%r, %r)" % (initial, char))
+    logger.info("strchr(%r, %r)" % (initial, char))
     cconv.execCallReturn(emu, retval, 0)
     return retval
 
@@ -861,7 +864,7 @@ def strrchr(emu, op=None):
     else:
         retval = cstr + idx
     
-    print("strrchr(%r, %r)" % (initial, char))
+    logger.info("strrchr(%r, %r)" % (initial, char))
     cconv.execCallReturn(emu, retval, 0)
     return retval
 
@@ -869,7 +872,7 @@ def strlen(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     start, = cconv.getCallArgs(emu, 1)
     data = readString(emu, start)
-    print("strlen(%r) => 0x%x" % (data, len(data)))
+    logger.info("strlen(%r) => 0x%x" % (data, len(data)))
     cconv.execCallReturn(emu, len(data), 0)
     return len(data)
 
@@ -878,7 +881,7 @@ def strcmp(emu, op=None):
     start1, start2 = cconv.getCallArgs(emu, 2)
     data1 = readString(emu, start1)
     data2 = readString(emu, start2)
-    print("strcmp(%r, %r)" % (data1, data2))
+    logger.info("strcmp(%r, %r)" % (data1, data2))
     data1len = len(data1)
     data2len = len(data2)
     failed = False
@@ -895,7 +898,7 @@ def strcmp(emu, op=None):
     
     retval = data2[idx] - data1[idx]
     if failed:
-        print("strcmp failed: %d" % retval)
+        logger.info("strcmp failed: %d" % retval)
 
     cconv.execCallReturn(emu, retval, 0)
     return retval
@@ -905,7 +908,7 @@ def strncmp(emu, op=None):
     start1, start2, count = cconv.getCallArgs(emu, 3)
     data1 = readString(emu, start1)[:count]
     data2 = readString(emu, start2)[:count]
-    print("strncmp(%r, %r, %r)" % (data1, data2, count))
+    logger.info("strncmp(%r, %r, %r)" % (data1, data2, count))
     data1len = len(data1)
     data2len = len(data2)
     failed = False
@@ -922,7 +925,7 @@ def strncmp(emu, op=None):
     
     retval = data2[idx] - data1[idx]
     if failed:
-        print("strncmp failed: %d" % retval)
+        logger.info("strncmp failed: %d" % retval)
 
     cconv.execCallReturn(emu, retval, 0)
     return retval
@@ -932,7 +935,7 @@ def strdup(emu, op=None):
     strSource, = cconv.getCallArgs(emu, 1)
 
     string = emu.readMemString(strSource) + b'\0'
-    print("strdup(%r)" % (string))
+    logger.info("strdup(%r)" % (string))
 
     heap = getHeap(emu)
     dupe = heap.malloc(len(string))
@@ -945,7 +948,7 @@ def strdup(emu, op=None):
 def Sleep(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     dwMS, = cconv.getCallArgs(emu, 1)
-    print("Sleep: dwMillisectonds: %d" % (dwMS))
+    logger.info("Sleep: dwMillisectonds: %d" % (dwMS))
     # calling getHeap initializes a heap.  we can cheat for now.  we may need to initialize new heaps here
     time.sleep(dwMS/1000)
     emu.nemu.pause = True
@@ -956,14 +959,14 @@ def Sleep(emu, op=None):
 def HeapCreate(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     opts, initsz, maxsz = cconv.getCallArgs(emu, 3)
-    print("HeapCreate: flOptions: 0x%x dwInitialSize: 0x%x, dwMaxSize" % (opts, initsz, maxsz))
+    logger.info("HeapCreate: flOptions: 0x%x dwInitialSize: 0x%x, dwMaxSize" % (opts, initsz, maxsz))
     # calling getHeap initializes a heap.  we can cheat for now.  we may need to initialize new heaps here
     cconv.execCallReturn(emu, emu.setVivTaint('MSHeap', op.va), 3)
 
 def HeapDestroy(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     heapHandle = cconv.getCallArgs(emu, 1)
-    print("HeapDestroy: 0x%x" % heapHandle)
+    logger.info("HeapDestroy: 0x%x" % heapHandle)
     # calling getHeap initializes a heap.  we can cheat for now.  we may need to initialize new heaps here
     cconv.execCallReturn(emu, heapHandle, 1)
 
@@ -980,13 +983,13 @@ def HeapAlloc(emu, op=None):
 
     heap = getHeap(emu)
     allocated_ptr = heap.malloc(size)
-    print("malloc(0x%x)  => 0x%x" % (size, allocated_ptr))
+    logger.info("malloc(0x%x)  => 0x%x" % (size, allocated_ptr))
     cconv.execCallReturn(emu, allocated_ptr, 3)
 
 def HeapFree(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     hheap, dwflags, va = cconv.getCallArgs(emu, 3)
-    print("FREE: 0x%x" % va)
+    logger.info("FREE: 0x%x" % va)
     cconv.execCallReturn(emu, va, 3)
 
 def HeapReAlloc(emu, op=None):
@@ -995,7 +998,7 @@ def HeapReAlloc(emu, op=None):
 
     heap = getHeap(emu)
     allocated_ptr = heap.realloc(existptr, size)
-    print("HeapReAlloc(0x%x, 0x%x, 0x%x, 0x%x): 0x%x" % (hheap, dwflags, existptr, size, allocated_ptr))
+    logger.info("HeapReAlloc(0x%x, 0x%x, 0x%x, 0x%x): 0x%x" % (hheap, dwflags, existptr, size, allocated_ptr))
     cconv.execCallReturn(emu, allocated_ptr, 4)
 
 critical_sections = collections.defaultdict(list)
@@ -1003,7 +1006,7 @@ def InitializeCriticalSection(emu, op=None):
     global critical_sections
     ccname, cconv = getMSCallConv(emu, op.va)
     lpCriticalSection, = cconv.getCallArgs(emu, 1)
-    print("InitializeCriticalSection(0x%x)" % (lpCriticalSection))
+    logger.info("InitializeCriticalSection(0x%x)" % (lpCriticalSection))
     critical_sections[lpCriticalSection].append(('Init', op.va))
     # do absolutely nothing but clean up
     cconv.execCallReturn(emu, 0, 1)
@@ -1012,7 +1015,7 @@ def EnterCriticalSection(emu, op=None):
     global critical_sections
     ccname, cconv = getMSCallConv(emu, op.va)
     lpCriticalPointer, = cconv.getCallArgs(emu, 1)
-    print("EnterCriticalSection(0x%x)" % (lpCriticalPointer))
+    logger.info("EnterCriticalSection(0x%x)" % (lpCriticalPointer))
     critical_sections[lpCriticalPointer].append(('Enter',op.va))
     # do absolutely nothing but clean up
     cconv.execCallReturn(emu, 0, 1)
@@ -1021,7 +1024,7 @@ def LeaveCriticalSection(emu, op=None):
     global critical_sections
     ccname, cconv = getMSCallConv(emu, op.va)
     lpCriticalPointer, = cconv.getCallArgs(emu, 1)
-    print("LeaveCriticalSection(0x%x)" % (lpCriticalPointer))
+    logger.info("LeaveCriticalSection(0x%x)" % (lpCriticalPointer))
     critical_sections[lpCriticalPointer].append(('Leave', op.va))
     # do absolutely nothing but clean up
 
@@ -1031,7 +1034,7 @@ def DeleteCriticalSection(emu, op=None):
     global critical_sections
     ccname, cconv = getMSCallConv(emu, op.va)
     lpCriticalPointer, = cconv.getCallArgs(emu, 1)
-    print("DeleteCriticalSection(0x%x)" % (lpCriticalPointer))
+    logger.info("DeleteCriticalSection(0x%x)" % (lpCriticalPointer))
     critical_sections[lpCriticalPointer].append(('Delete', op.va))
     # do absolutely nothing but clean up
 
@@ -1042,7 +1045,7 @@ def InterlockedCompareExchange(emu, op=None):
     Destination, xchgval, cmpval = cconv.getCallArgs(emu, 3)
     destval = emu.readMemValue(Destination, 4)
 
-    print("InterlockedCompareExchange(0x%x, 0x%x, 0x%x)" % (destval, xchgval, cmpval))
+    logger.info("InterlockedCompareExchange(0x%x, 0x%x, 0x%x)" % (destval, xchgval, cmpval))
 
     if destval == cmpval:
         emu.writeMemValue(Destination, xchgval, 4)
@@ -1066,34 +1069,34 @@ def GetCurrentThread(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     curthread = kernel.getCurThread()
-    print("GetCurrentThread() => %r" % curthread)
+    logger.info("GetCurrentThread() => %r" % curthread)
     cconv.execCallReturn(emu, curthread, 0)
 
 def GetCurrentThreadId(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetCurrentThreadId()")
+    logger.info("GetCurrentThreadId()")
     cconv.execCallReturn(emu, kernel.getCurThread(), 0)
 
 def GetCurrentProcess(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     curpid = kernel.getCurPid()
-    print("GetCurrentProcess() => %r" % curpid)
+    logger.info("GetCurrentProcess() => %r" % curpid)
     cconv.execCallReturn(emu, curpid, 0)
     # TODO: create a "Handle Generating System" that manages all handles
 
 def GetCurrentProcessId(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetCurrentProcessId()")
+    logger.info("GetCurrentProcessId()")
     cconv.execCallReturn(emu, kernel.getCurPid(), 0)
 
 def GetTickCount(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     tickcount = kernel.GetTickCount()
-    print("GetTickCount()")
+    logger.info("GetTickCount()")
     cconv.execCallReturn(emu, tickcount, 0)
 
 def GetMessageTime(emu, op=None):
@@ -1103,7 +1106,7 @@ def GetMessageTime(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     msgtime = kernel.GetMessageTime()
-    print("GetMessageTime() => %r" % msgtime)
+    logger.info("GetMessageTime() => %r" % msgtime)
 
     cconv.execCallReturn(emu, msgtime, 0)
 
@@ -1127,7 +1130,7 @@ def GetSystemTime(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpSystemTime, = cconv.getCallArgs(emu, 1)
-    print("GetSystemTime(0x%x)" % lpSystemTime)
+    logger.info("GetSystemTime(0x%x)" % lpSystemTime)
 
     winktime = kernel.GetSystemTime()
     systime = SYSTEMTIME(winktime)
@@ -1146,7 +1149,7 @@ def GetSystemTimes(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpIdleTime, lpKernelTime, lpUserTime = cconv.getCallArgs(emu, 3)
-    print("GetSystemTimes(0x%x, 0x%x, 0x%x)" % (lpIdleTime, lpKernelTime, lpUserTime))
+    logger.info("GetSystemTimes(0x%x, 0x%x, 0x%x)" % (lpIdleTime, lpKernelTime, lpUserTime))
 
     idletime, winktime, usertime = kernel.GetSystemTimes()
     emu.writeMemoryFormat(lpIdleTime, '<Q', idletime)
@@ -1163,7 +1166,7 @@ def GetSystemTimeAsFileTime(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpSystemTimeAsFileTime, = cconv.getCallArgs(emu, 1)
-    print("GetSystemTimeAsFileTime(0x%x)" % lpSystemTimeAsFileTime)
+    logger.info("GetSystemTimeAsFileTime(0x%x)" % lpSystemTimeAsFileTime)
 
     winktime = kernel.GetSystemTimeAsFileTime()
     emu.writeMemoryFormat(lpSystemTimeAsFileTime, '<Q', winktime)
@@ -1178,13 +1181,13 @@ def SystemTimeToFileTime(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpSystemTime, lpFileTime = cconv.getCallArgs(emu, 2)
-    print("SystemTimeToFileTime(0x%x, 0x%x)" % (lpSystemTime, lpFileTime))
+    logger.info("SystemTimeToFileTime(0x%x, 0x%x)" % (lpSystemTime, lpFileTime))
     # THIS IS A PROBLEM IF THEY ASSUME STACK IS CLEAN!!!!
     sometimetup = tuple([emu.readMemValue(lpSystemTime + x, 2) for x in range(0, 16, 2)]) 
     #sometime = tuple([sometimeraw[x:x+2] for x in range(0, 16, 2)])
 
     winktime = kernel.SystemTimeToFileTime(sometimetup)
-    print("winktime: %r     SystemTime: %r" % (winktime, repr(sometimetup)))
+    logger.info("winktime: %r     SystemTime: %r" % (winktime, repr(sometimetup)))
     emu.writeMemoryFormat(lpFileTime, '<Q', winktime)
 
     cconv.execCallReturn(emu, 1, 2)
@@ -1202,7 +1205,7 @@ def GetProcessTimes(emu, op=None):
     hProcess, lpCreationTime, lpExitTime, lpKernelTime, lpUserTime = cconv.getCallArgs(emu, 5)
 
     creationtime, exittime, winktime, usertime = kernel.GetProcessTimes(hProcess)
-    print("GetProcessTimes(0x%x, 0x%x, 0x%x, 0x%x, 0x%x) => (0x%x, 0x%x, 0x%x, 0x%x)" % (hProcess, \
+    logger.info("GetProcessTimes(0x%x, 0x%x, 0x%x, 0x%x, 0x%x) => (0x%x, 0x%x, 0x%x, 0x%x)" % (hProcess, \
             lpCreationTime, lpExitTime, lpKernelTime, lpUserTime, creationtime, exittime, winktime, \
             usertime))
     emu.writeMemoryFormat(lpCreationTime, '<Q', creationtime)
@@ -1225,7 +1228,7 @@ def GetThreadTimes(emu, op=None):
     hThread, lpCreationTime, lpExitTime, lpKernelTime, lpUserTime = cconv.getCallArgs(emu, 5)
 
     creationtime, exittime, winktime, usertime = kernel.GetThreadTimes(hThread)
-    print("GetThreadTimes(0x%x, 0x%x, 0x%x, 0x%x, 0x%x) => (0x%x, 0x%x, 0x%x, 0x%x)" % (hThread, lpCreationTime, lpExitTime, lpKernelTime, lpUserTime, creationtime, exittime, winktime, usertime))
+    logger.info("GetThreadTimes(0x%x, 0x%x, 0x%x, 0x%x, 0x%x) => (0x%x, 0x%x, 0x%x, 0x%x)" % (hThread, lpCreationTime, lpExitTime, lpKernelTime, lpUserTime, creationtime, exittime, winktime, usertime))
     emu.writeMemoryFormat(lpCreationTime, '<Q', creationtime)
     emu.writeMemoryFormat(lpExitTime, '<Q', exittime)
     emu.writeMemoryFormat(lpKernelTime, '<Q', winktime)
@@ -1237,7 +1240,7 @@ def QueryPerformanceCounter(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpPerformanceCount, = cconv.getCallArgs(emu, 1)
-    print("QueryPerformanceCounter(0x%x)" % lpPerformanceCount)
+    logger.info("QueryPerformanceCounter(0x%x)" % lpPerformanceCount)
     perfcnt = kernel.QueryPerformanceCounter()
     emu.writeMemoryFormat(lpPerformanceCount, '<Q', perfcnt)
 
@@ -1247,7 +1250,7 @@ def GlobalMemoryStatus(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpBuffer, = cconv.getCallArgs(emu, 1)
-    print("GlobalMemoryStatus(0x%x)" % lpBuffer)
+    logger.info("GlobalMemoryStatus(0x%x)" % lpBuffer)
     memstat = kernel.GlobalMemoryStatus()
     emu.writeMemory(lpBuffer, memstat.vsEmit())
 
@@ -1257,7 +1260,7 @@ def GetProcessWorkingSetSize(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     hProcess, lpMinWorkingSetSize, lpMaxWorkingSetSize = cconv.getCallArgs(emu, 3)
-    print("GetProcessWorkingSetSize(0x%x, 0x%x, 0x%x)" % \
+    logger.info("GetProcessWorkingSetSize(0x%x, 0x%x, 0x%x)" % \
             (hProcess, lpMinWorkingSetSize, lpMaxWorkingSetSize))
     minwss, maxwss = kernel.GetProcessWorkingSetSize(hProcess)
     emu.writeMemoryPtr(lpMinWorkingSetSize, minwss)
@@ -1268,7 +1271,7 @@ def GetProcessWorkingSetSize(emu, op=None):
 def GetActiveWindow(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetActiveWindow()")
+    logger.info("GetActiveWindow()")
     hWin = kernel.GetActiveWindow()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1276,7 +1279,7 @@ def GetActiveWindow(emu, op=None):
 def GetCapture(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetCapture()")
+    logger.info("GetCapture()")
     hWin = kernel.GetCapture()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1284,7 +1287,7 @@ def GetCapture(emu, op=None):
 def GetClipboardOwner(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetClipboardOwner()")
+    logger.info("GetClipboardOwner()")
     hWin = kernel.GetClipboardOwner()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1292,7 +1295,7 @@ def GetClipboardOwner(emu, op=None):
 def GetClipboardViewer(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetClipboardViewer()")
+    logger.info("GetClipboardViewer()")
     hWin = kernel.GetClipboardViewer()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1300,7 +1303,7 @@ def GetClipboardViewer(emu, op=None):
 def GetFocus(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetFocus()")
+    logger.info("GetFocus()")
     hWin = kernel.GetFocus()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1308,7 +1311,7 @@ def GetFocus(emu, op=None):
 def GetMessagePos(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("GetMessagePos()")
+    logger.info("GetMessagePos()")
     hWin = kernel.GetMessagePos()
 
     cconv.execCallReturn(emu, hWin, 0)
@@ -1317,7 +1320,7 @@ def GetCaretPos(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpPoint, = cconv.getCallArgs(emu, 1)
-    print("GetCaretPos(0x%x)" % lpPoint)
+    logger.info("GetCaretPos(0x%x)" % lpPoint)
     x, y = kernel.GetCaretPos()
     emu.writeMemoryPtr(lpPoint, x)
     emu.writeMemoryPtr(lpPoint + emu.psize, y)
@@ -1328,7 +1331,7 @@ def GetCursorPos(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     lpPoint, = cconv.getCallArgs(emu, 1)
-    print("GetCursorPos(0x%x)" % lpPoint)
+    logger.info("GetCursorPos(0x%x)" % lpPoint)
     x, y = kernel.GetCursorPos()
     emu.writeMemoryPtr(lpPoint, x)
     emu.writeMemoryPtr(lpPoint + emu.psize, y)
@@ -1339,7 +1342,7 @@ def GetQueueStatus(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     flags, = cconv.getCallArgs(emu, 1)
-    print("GetQueueStatus(0x%x)" % flags)
+    logger.info("GetQueueStatus(0x%x)" % flags)
     queued, newsince = kernel.GetQueueStatus(flags)
     retval = (queued << 16) | newsince
 
@@ -1351,14 +1354,14 @@ def _initterm_e(emu, op=None):
     lpFuncArrayStart, lpFuncArrayStop = cconv.getCallArgs(emu, 2)
     errno = 0
 
-    print("_initterm_e(0x%x, 0x%x)" % (lpFuncArrayStart, lpFuncArrayStop))
+    logger.info("_initterm_e(0x%x, 0x%x)" % (lpFuncArrayStart, lpFuncArrayStop))
 
     # get return value and store it...
     arryptr = lpFuncArrayStart
     while arryptr < lpFuncArrayStop:
         fnptr = emu.readMemoryPtr(arryptr)
         if fnptr:
-            print("... 0x%x" % fnptr)
+            logger.info("... 0x%x" % fnptr)
             if not emu.isValidPointer(fnptr):
                 errno = -1
             else:
@@ -1383,7 +1386,7 @@ def _initterm_e(emu, op=None):
 
         arryptr += emu.psize
     
-    print("_initterm_e(0x%x, 0x%x) COMPLETE" % (lpFuncArrayStart, lpFuncArrayStop))
+    logger.info("_initterm_e(0x%x, 0x%x) COMPLETE" % (lpFuncArrayStart, lpFuncArrayStop))
     cconv.execCallReturn(emu, errno, 2)
 
 def _initterm(emu, op=None):
@@ -1391,14 +1394,14 @@ def _initterm(emu, op=None):
     lpFuncArrayStart, lpFuncArrayStop = cconv.getCallArgs(emu, 2)
     errno = 0
 
-    print("_initterm(0x%x, 0x%x)" % (lpFuncArrayStart, lpFuncArrayStop))
+    logger.info("_initterm(0x%x, 0x%x)" % (lpFuncArrayStart, lpFuncArrayStop))
 
     # get return value and store it...
     arryptr = lpFuncArrayStart
     while arryptr < lpFuncArrayStop:
         fnptr = emu.readMemoryPtr(arryptr)
         if fnptr:
-            print("... 0x%x" % fnptr)
+            logger.info("... 0x%x" % fnptr)
             if not emu.isValidPointer(fnptr):
                 errno = -1
             else:
@@ -1418,14 +1421,14 @@ def _initterm(emu, op=None):
 
         arryptr += emu.psize
     
-    print("_initterm(0x%x, 0x%x) COMPLETE" % (lpFuncArrayStart, lpFuncArrayStop))
+    logger.info("_initterm(0x%x, 0x%x) COMPLETE" % (lpFuncArrayStart, lpFuncArrayStop))
     cconv.execCallReturn(emu, errno, 2)
 
 def __dllonexit(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     func, pbegin, pend = cconv.getCallArgs(emu, 3)
-    print("__dllonexit(0x%x, 0x%x, 0x%x)" % (func, pbegin, pend))
+    logger.info("__dllonexit(0x%x, 0x%x, 0x%x)" % (func, pbegin, pend))
 
     retva = cconv.getReturnAddress(emu)
     kernel._dllonexit(retva, func, pbegin, pend)
@@ -1452,7 +1455,7 @@ def rtTlsGetValue(slot):
     if len(tls_data[slot]):
         return tls_data[slot][-1]
 
-    print("rtTlsGetValue(%d) returning None, sorry..." % slot)
+    logger.info("rtTlsGetValue(%d) returning None, sorry..." % slot)
 
 
 def rtTlsSetValue(slot, data):
@@ -1464,7 +1467,7 @@ def rtTlsSetValue(slot, data):
 def TlsAlloc(emu, op=None):
     # should we track this in the emulator?
     ccname, cconv = getMSCallConv(emu, op.va)
-    print("TlsAlloc()")
+    logger.info("TlsAlloc()")
     cconv.execCallReturn(emu, rtTlsAlloc(), 0)
 
 def TlsGetValue(emu, op=None):
@@ -1473,7 +1476,7 @@ def TlsGetValue(emu, op=None):
     slot, = cconv.getCallArgs(emu, 1)
 
     tlsval = rtTlsGetValue(slot)
-    print("TlsGetValue(%d): found %r" % (slot, tlsval))
+    logger.info("TlsGetValue(%d): found %r" % (slot, tlsval))
 
     if tlsval is None:  # do this here since we have an op and emu already, and it makes sense
         tlsval = emu.setVivTaint('TlsGetValue::Slot at 0x%x' % op.va, slot)
@@ -1487,7 +1490,7 @@ def TlsSetValue(emu, op=None):
     slot, data = cconv.getCallArgs(emu, 2)
 
 
-    print("TlsSetValue(%d, %r):" % (slot, data))
+    logger.info("TlsSetValue(%d, %r):" % (slot, data))
     cconv.execCallReturn(emu, rtTlsSetValue(slot, data), 2)
 
 
@@ -1552,7 +1555,7 @@ def CreateFileW(emu, op=None):
     lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile = cconv.getCallArgs(emu, 7)
     kernel = emu.getMeta('kernel')
     # this is the "W" part:
-    filename = readMemString(emui, lpFileName, wide=True)   # TODO: PR for Wide strings into mainline
+    filename = readMemString(emu, lpFileName, wide=True)   # TODO: PR for Wide strings into mainline
 
     result = kernel.CreateFile(filename, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile)
 
@@ -1564,7 +1567,7 @@ def fopen(emu, op=None):
 
     filename = emu.readMemString(pFilename)
     mode = emu.readMemString(pMode)
-    print("fopen(%r, %r)" % (filename, mode))
+    logger.info("fopen(%r, %r)" % (filename, mode))
 
     # check policy.  if this mode is not allowed, prompt the user
     uinp = None
@@ -1603,23 +1606,23 @@ def fopen(emu, op=None):
             if uinp.startswith('q'):
                 emu.nemu.resetNonstop()
 
-        print("DONE:  %r   %r" % (retval, myfile))
+        logger.info("DONE:  %r   %r" % (retval, myfile))
 
     cconv.execCallReturn(emu, retval, 2)
 
 def fread(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     pBuffer, size, count, stream = cconv.getCallArgs(emu, 4)
-    print("fread(0x%x, 0x%x, 0x%x, %r)" % (pBuffer, size, count, stream))
+    logger.info("fread(0x%x, 0x%x, 0x%x, %r)" % (pBuffer, size, count, stream))
 
     length = size * count
 
     kernel = emu.getMeta('kernel')
     data = kernel.fds[stream].read(length)
     if len(data) > 100:
-        print("  == %r..." % data[:100])
+        logger.info("  == %r..." % data[:100])
     else:
-        print("  == %r" % data)
+        logger.info("  == %r" % data)
     emu.writeMemory(pBuffer, data)
     retval = len(data)
 
@@ -1628,16 +1631,16 @@ def fread(emu, op=None):
 def fwrite(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     pBuffer, size, count, stream = cconv.getCallArgs(emu, 4)
-    print("fwrite(0x%x, 0x%x, 0x%x, %r)" % (pBuffer, size, count, stream))
+    logger.info("fwrite(0x%x, 0x%x, 0x%x, %r)" % (pBuffer, size, count, stream))
 
     length = size * count
 
     kernel = emu.getMeta('kernel')
     data = emu.readMemory(pBuffer, length)
     if len(data) > 100:
-        print("  == %r..." % data[:100])
+        logger.info("  == %r..." % data[:100])
     else:
-        print("  == %r" % data)
+        logger.info("  == %r" % data)
     
     kernel.fds[stream].write(data)
     retval = len(data)
@@ -1647,7 +1650,7 @@ def fwrite(emu, op=None):
 def fclose(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     stream, = cconv.getCallArgs(emu, 1)
-    print("fclose(%r)" % (stream))
+    logger.info("fclose(%r)" % (stream))
 
     kernel = emu.getMeta('kernel')
     kernel.fds[stream].close()
@@ -1659,7 +1662,7 @@ def isspace(emu, op=None):
     '''
     ccname, cconv = getLibcCallConv(emu)
     c, = cconv.getCallArgs(emu, 1)
-    print("isspace(0x%x)" % (c))
+    logger.debug("isspace(0x%x)" % (c))
 
     retval = (c in (0x9, 0xa, 0xb, 0xc, 0xd, 0x20))
 
@@ -1669,7 +1672,7 @@ def RegOpenKeyExA(emu, op=None):
     emu.nemu.stackDump()
     ccname, cconv = getMSCallConv(emu, op.va)
     hkey, lpSubKey, ulopts, samDesired, phkResult = cconv.getCallArgs(emu, 5)
-    print("RegOpenKeyExA(0x%x, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, lpSubKey, ulopts, samDesired, phkResult))
+    logger.info("RegOpenKeyExA(0x%x, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, lpSubKey, ulopts, samDesired, phkResult))
     kernel = emu.getMeta('kernel')
 
     SubKeyStr = None
@@ -1678,8 +1681,8 @@ def RegOpenKeyExA(emu, op=None):
             SubKeyStr = emu.readMemString(lpSubKey).decode('utf8')
         else:
             # must be a constant base:
-            print("RegOpenKeyExA: lpSubKey not NULL and not pointer: 0x%x" % lpSubKey)
-            print("     Instead using: %r" % SubKeyStr)
+            logger.info("RegOpenKeyExA: lpSubKey not NULL and not pointer: 0x%x" % lpSubKey)
+            logger.info("     Instead using: %r" % SubKeyStr)
 
     handle = kernel.registry.RegOpenKey(hkey, SubKeyStr, ulopts, samDesired)
     if handle:
@@ -1695,10 +1698,10 @@ def RegQueryValueExA(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     hkey, lpValueName, lpReserved, lpType, lpData, lpcbData = cconv.getCallArgs(emu, 6)
     kernel = emu.getMeta('kernel')
-    print("RegQueryValueExA(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, lpValueName, lpReserved, lpType, lpData, lpcbData))
+    logger.info("RegQueryValueExA(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, lpValueName, lpReserved, lpType, lpData, lpcbData))
 
     ValueName = emu.readMemString(lpValueName).decode('utf8')
-    print("RegQueryValueExA(%r, %r, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, ValueName, lpReserved, lpType, lpData, lpcbData))
+    logger.info("RegQueryValueExA(%r, %r, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, ValueName, lpReserved, lpType, lpData, lpcbData))
 
     rtype = None
     rval = None
@@ -1715,15 +1718,15 @@ def RegQueryValueExA(emu, op=None):
             emu.writeMemoryPtr(lpcbData, len(rval))
 
     except Exception as e:
-        print("Error: %r" % e)
+        logger.info("Error: %r" % e)
 
     if None in (rtype, rval):
-        print("RegQueryValueExA: Cannot find key data!")
+        logger.info("RegQueryValueExA: Cannot find key data!")
         retval = win32const.ERROR_BADKEY
     else:
         retval = 0
 
-    print("RegQueryValueExA(0x%x, %r, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, ValueName, lpReserved, lpType, lpData, lpcbData))
+    logger.info("RegQueryValueExA(0x%x, %r, 0x%x, 0x%x, 0x%x, 0x%x)" % (hkey, ValueName, lpReserved, lpType, lpData, lpcbData))
 
     cconv.execCallReturn(emu, retval, 6)
 
@@ -1731,7 +1734,7 @@ def RegCloseKey(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     hkey, = cconv.getCallArgs(emu, 1)
     kernel = emu.getMeta('kernel')
-    print("RegCloseKey(0x%x)" % (hkey,))
+    logger.info("RegCloseKey(0x%x)" % (hkey,))
 
     retval = kernel.registry.RegCloseKey(hkey)
 
@@ -1742,7 +1745,7 @@ def FreeLibrary(emu, op=None):
     hLibModule, = cconv.getCallArgs(emu, 1)
     fname = emu.vw.getFileByVa(hLibModule)
 
-    print("FreeLibrary(0x%x)  (%r)" % (hLibModule, fname))
+    logger.info("FreeLibrary(0x%x)  (%r)" % (hLibModule, fname))
     kernel = emu.getMeta('kernel')
     kernel.freeLibrary(hLibModule, fname)
 
@@ -1777,13 +1780,13 @@ def LoadLibraryExA(emu, op=None):
         while result is None:
             try:
                 result = emu.vw.parseExpression(normfn)
-                print("Map loaded...")
+                logger.info("Map loaded...")
                 # register with the Kernel that we're loading (in the future, more LoadLibrary functionality may move there)
                 kernel.loadLibrary(result, normfn)
                 break
 
             except ExpressionFail as e:
-                print(e)
+                logger.info(e)
                 # if we don't have it already loaded and resolvable in the workspace
                 # we must load it
            
@@ -1795,37 +1798,37 @@ def LoadLibraryExA(emu, op=None):
                         result = 0
                         break
 
-                print("Loading...")
+                logger.info("Loading...")
                 normfn = emu.vw.loadFromFile(filepath)
                 go = True
-                print("Loaded")
+                logger.info("Loaded")
 
                 # if we have it setup, run vw.analyze()
                 if emu.getMeta("AnalyzeLoadLibraryLoads", False):
-                    print("Analyzing...")
+                    logger.info("Analyzing...")
                     emu.vw.analyze()
 
 
                 libva = emu.vw.parseExpression(normfn)
 
                 # merge the imported memory maps from the Workspace into the emu
-                print("Sync VW maps to EMU...")
+                logger.info("Sync VW maps to EMU...")
                 syncEmuWithVw(emu.vw, emu)
                 kernel.loadLibrary(result, normfn)
-                print("Synced")
+                logger.info("Synced")
 
             except KeyboardInterrupt:
                 break
 
             except Exception as e:
-                print("Error while attempting to load %r:  %r" % (normfn, e))
+                logger.info("Error while attempting to load %r:  %r" % (normfn, e))
 
         # run Library Init routine (__entry)
         ret = emu.readMemoryPtr(emu.getStackCounter())  # FIXME: rework using cconv: this only works on archs where RET is pushed to the stack
         init = emu.vw.parseExpression(normfn + ".__entry")
 
         if init:
-            print("RUNNING LIBRARY INITIALIZER: %r" % libFileName)
+            logger.info("RUNNING LIBRARY INITIALIZER: %r" % libFileName)
             ccname, cconv = getMSCallConv(emu, init)
             cconv.allocateCallSpace(emu, 3)
             # set RET to 0x8831337
@@ -1839,11 +1842,11 @@ def LoadLibraryExA(emu, op=None):
             emu.setProgramCounter(init)
             emu.nemu.runStep(silent=emu.nemu.silent, pause=False, runTil=0x8831337)
 
-            print("COMPLETED LIBRARY INITIALIZER: %r" % libFileName)
+            logger.info("COMPLETED LIBRARY INITIALIZER: %r" % libFileName)
             if emu.getMeta("LibInitPause", False):
                 input()
         else:
-            print("No Library Init found, just returning")
+            logger.info("No Library Init found, just returning")
 
     cconv.execCallReturn(emu, result, 3)
 
@@ -1855,7 +1858,7 @@ DLL_THREAD_DETACH = 3
 def GetProcAddress(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     hModule, lpProcName = cconv.getCallArgs(emu, 2)
-    print("GetProcAddress(0x%x, 0x%x)" % (hModule, lpProcName))
+    logger.info("GetProcAddress(0x%x, 0x%x)" % (hModule, lpProcName))
 
     result = 0
     try:
@@ -1864,10 +1867,10 @@ def GetProcAddress(emu, op=None):
             libname = libmap[3]
             ProcName = emu.readMemString(lpProcName).decode('utf-8')
             fullname = "%s.%s" % (libname, ProcName)
-            print("     ==> (%r)" % (fullname))
+            logger.info("     ==> (%r)" % (fullname))
             result = emu.vw.parseExpression(fullname)
     except Exception as e:
-        print("Error: %r" % e)
+        logger.info("Error: %r" % e)
 
     cconv.execCallReturn(emu, result, 2)
 
@@ -1879,11 +1882,11 @@ def GetModuleFileNameA(emu, op=None):
     kernel = emu.getMeta('kernel')
     ccname, cconv = getMSCallConv(emu, op.va)
     hModule, lpFilename, nSize = cconv.getCallArgs(emu, 3)
-    print("GetModuleFilenameA(0x%x, 0x%x, 0x%x)" % (hModule, lpFilename, nSize))
+    logger.info("GetModuleFilenameA(0x%x, 0x%x, 0x%x)" % (hModule, lpFilename, nSize))
 
     filepath = kernel.getFilePathByVa(hModule)
-    print("GetModuleFileNameA map: %r" % (filepath))
-    print(kernel.filepathmap)
+    logger.info("GetModuleFileNameA map: %r" % (filepath))
+    logger.info(kernel.filepathmap)
 
     # TODO:  push upstream to include "OrigFilename" to FileMeta
 
@@ -1894,10 +1897,10 @@ def GetModuleFileNameA(emu, op=None):
         else:
             curname = b"Filename.exe"
 
-        print("GetModuleFileNameA(%r)" % curname)
+        logger.info("GetModuleFileNameA(%r)" % curname)
 
         # search internal data structures for this module's path
-        print("kernel: %r" % kernel)
+        logger.info("kernel: %r" % kernel)
 
         if not filepath:
             try:
@@ -1912,7 +1915,7 @@ def GetModuleFileNameA(emu, op=None):
             except FileNotFoundError:
                 pass
 
-    print("GetModuleFileNameA() -> %r" % repr(filepath))
+    logger.info("GetModuleFileNameA() -> %r" % repr(filepath))
 
     if filepath:
         curname = filepath
@@ -1950,7 +1953,7 @@ def CreateMutexA(emu, op=None):
 
     kernel = emu.getMeta('kernel')
     kernel.mutexes[newmutex] = (op.va, lpMutexAttributes, bInitialOwner, name)
-    print("CreateMutexA: (0x%x, %r, 0x%x, 0x%x)" % (newmutex, name, bInitialOwner, lpMutexAttributes))
+    logger.info("CreateMutexA: (0x%x, %r, 0x%x, 0x%x)" % (newmutex, name, bInitialOwner, lpMutexAttributes))
     emu.writeMemory(newmutex, b"Mutex: %r" % name)
 
     cconv.execCallReturn(emu, newmutex, 3)
@@ -1964,14 +1967,14 @@ def ReleaseMutex(emu, op=None):
 
     if mutup is None:
         #do some error thing here
-        print("FAILED (MutexNotFoundInKernel)   ReleaseMutex(0x%x)" % hMutex)
+        logger.info("FAILED (MutexNotFoundInKernel)   ReleaseMutex(0x%x)" % hMutex)
     else:
         op.va, lpMutexAttributes, bInitialOwner, lpName = mutup
         mutdata = emu.readMemory(hMutex, 32)
         mutdata = mutdata[:-10] + b"Released\0\0"
 
         emu.writeMemory(hMutex, mutdata)
-        print("ReleaseMutex(0x%x)" % hMutex)
+        logger.info("ReleaseMutex(0x%x)" % hMutex)
 
     cconv.execCallReturn(emu, 0, 1)
 
@@ -1991,7 +1994,7 @@ def WaitForSingleObject(emu, op=None):
     hHandle, dwMillis = cconv.getCallArgs(emu, 2)
 
     objbytes = emu.readMemory(hHandle, 32)        # FIXME: make this more meaningful
-    print("WaitForSingleObject(0x%x, %d)  => %r" % (hHandle, dwMillis, objbytes))
+    logger.info("WaitForSingleObject(0x%x, %d)  => %r" % (hHandle, dwMillis, objbytes))
 
     # write "Acquired"
     mutup = kernel.mutexes.get(hHandle)
@@ -2007,7 +2010,7 @@ def WaitForSingleObject(emu, op=None):
 
     # user interface
     if emu.getMeta('WaitPause'):    # this is ugly and in need of documentation or paradigm def
-        uinp = input("'q' to stop nonstop")
+        uinp = input("'q' to stop nonstop emulation")
         print("saw this: %r" % uinp.lower())
         if uinp.lower().startswith('q'):
             print("RESETTING NONSTOP MODE")
@@ -2046,28 +2049,28 @@ def CloseHandle(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     hHandle, = cconv.getCallArgs(emu, 1)
     emu.getMeta('CloseHandle', []).append((op.va, hHandle))
-    print("CloseHandle(0x%x)" % hHandle)
+    logger.info("CloseHandle(0x%x)" % hHandle)
 
     cconv.execCallReturn(emu, hHandle, 1)
 
 def EncodePointer(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     ptr, = cconv.getCallArgs(emu, 1)
-    print("EncodePointer(0x%x) => 0x%x" % (ptr, ptr))
+    logger.info("EncodePointer(0x%x) => 0x%x" % (ptr, ptr))
 
     cconv.execCallReturn(emu, ptr, 1)
 
 def DecodePointer(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     ptr, = cconv.getCallArgs(emu, 1)
-    print("DecodePointer(0x%x) => 0x%x" % (ptr, ptr))
+    logger.info("DecodePointer(0x%x) => 0x%x" % (ptr, ptr))
 
     cconv.execCallReturn(emu, ptr, 1)
 
 def _amsg_exit(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     val, = cconv.getCallArgs(emu, 1)
-    print("_amsg_exit(0x%x) - the Process Should Now TERMINATE!" % (val))
+    logger.info("_amsg_exit(0x%x) - the Process Should Now TERMINATE!" % (val))
     emu.nemu.resetNonstop()
 
     cconv.execCallReturn(emu, val, 1)
@@ -2075,14 +2078,14 @@ def _amsg_exit(emu, op=None):
 def _lock(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     val, = cconv.getCallArgs(emu, 1)
-    print("_lock(%r)" % (val))
+    logger.info("_lock(%r)" % (val))
 
     cconv.execCallReturn(emu, val, 0)
 
 def _unlock(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     val, = cconv.getCallArgs(emu, 1)
-    print("_unlock(%r)" % (val))
+    logger.info("_unlock(%r)" % (val))
 
     cconv.execCallReturn(emu, val, 0)
 
@@ -2186,7 +2189,7 @@ def findInternalPath(kernel, libFileName, casein=False, matchFnOnly=True):
     print('sep=%r    libFileName=%r    ulibFileName=%r' % (sep, libFileName, ulibFileName))
 
     for filepath in kernel.fs:
-        print("filepath: %r" % filepath)
+        logger.debug("filepath: %r" % filepath)
         # carve up the path and filename info
         meta = filepath.rsplit(sep, 1)
         if len(meta) == 2:
@@ -2204,13 +2207,13 @@ def findInternalPath(kernel, libFileName, casein=False, matchFnOnly=True):
         uf = f.upper()
 
         if casein:
-            print("%r == %r  (%r)" % (uf, ulibFileName, uf == ulibFileName))
+            logger.debug("%r == %r  (%r)" % (uf, ulibFileName, uf == ulibFileName))
             if uf == ulibFileName:
-                print(sep.join([path, fname]))
+                logger.debug(sep.join([path, fname]))
                 return(sep.join([path, fname]))
 
         elif f == libFileName:
-            print(sep.join([path, fname]))
+            logger.debug(sep.join([path, fname]))
             return(sep.join([path, fname]))
 
     raise FileNotFoundError(libFileName)
@@ -2235,15 +2238,15 @@ def findExtPath(pathmaps, libFileName, casein=False, kernel=None, matchFnOnly=Tr
         sep = kernel.sep
 
     else:
-        print("running without a kernel?")
+        logger.warning("running without a kernel?")
         sep = ossep
 
     ulibFileName = libFileName.upper()
-    print("findExtPath   casein=%r" % casein)
-    print('sep=%r    libFileName=%r    ulibFileName=%r' % (sep, libFileName, ulibFileName))
+    logger.debug("findExtPath   casein=%r" % casein)
+    logger.debug('sep=%r    libFileName=%r    ulibFileName=%r' % (sep, libFileName, ulibFileName))
 
     for pathpart, fakepart in pathmaps:
-        print("pathmaps:  pathpart: %r   fakepart: %r" % (pathpart, fakepart))
+        logger.debug("pathmaps:  pathpart: %r   fakepart: %r" % (pathpart, fakepart))
         for fname in os.listdir(pathpart):
             if matchFnOnly:
                 f = fname
@@ -2251,15 +2254,15 @@ def findExtPath(pathmaps, libFileName, casein=False, kernel=None, matchFnOnly=Tr
                 f = sep.join([fakepart, fname])
 
             uf = f.upper()
-            print("libFileName: %r    ulibFileName: %r    compared to f=%r   and uf=%r" % (libFileName, ulibFileName, f, uf))
+            logger.debug("libFileName: %r    ulibFileName: %r    compared to f=%r   and uf=%r" % (libFileName, ulibFileName, f, uf))
             if casein:
                 if uf == ulibFileName:
-                    print(sep.join([fakepart, fname]))
+                    logger.debug(sep.join([fakepart, fname]))
                     return(sep.join([fakepart, fname]), ossep.join([pathpart, fname]))
 
             elif f == libFileName:
-                print(sep.join([fakepart, fname]))
-                print(sep.join([fakepart, fname]), ossep.join([pathpart, fname]))
+                logger.debug(sep.join([fakepart, fname]))
+                logger.debug(sep.join([fakepart, fname]), ossep.join([pathpart, fname]))
                 return(sep.join([fakepart, fname]), ossep.join([pathpart, fname]))
 
     raise FileNotFoundError(libFileName)
@@ -2274,7 +2277,7 @@ def doWin32StringCompare(emu, op, \
         lpVersionInfo, lpReserved, lParam, charsize=1):
 
     if dwCmpFlags:
-        print("CompareStringEx with flags %x, unsupported." % dwCmpFlags)
+        logger.warning("CompareStringEx with flags %x, unsupported." % dwCmpFlags)
 
     idx = 0
     result = 0
@@ -2370,7 +2373,7 @@ def vsnprintf(emu, op=None):
     emu.writeMemory(s, out[:n])
     result = len(out)
 
-    print("vsnprintf: %r" % out)
+    logger.info("vsnprintf: %r" % out)
     cconv.execCallReturn(emu, result, 4)
    
 
@@ -2393,7 +2396,7 @@ def vsprintf_s(emu, op=None):
         out.append(realstr)
         lastfmtoff = fmtoff + len(fmtbit)
 
-        print(fmtoff, fmtbit)
+        logger.info(fmtoff, fmtbit)
 
         bits = emu.readMemoryPtr(args + off)
         if fmtbit.endswith(b's'):
@@ -2424,7 +2427,7 @@ def vsprintf_s(emu, op=None):
     emu.writeMemory(s, outstr)
     result = len(outstr)
 
-    print("vsprintf_s: %r" % outstr)
+    logger.info("vsprintf_s: %r" % outstr)
     cconv.execCallReturn(emu, result, 4)
    
 
@@ -2439,7 +2442,7 @@ def getenv(emu, op=None):
     nemu = emu.nemu
     vw = nemu.vw
     varname = nemu.emu.readMemString(varnameptr)
-    print("getenv(%r)" % (varname))
+    logger.info("getenv(%r)" % (varname))
 
     # lookup the env var:
     kernel = emu.getMeta('kernel')
@@ -2470,7 +2473,7 @@ def getenv_s(emu, op=None):
     nemu = emu.nemu
     vw = nemu.vw
     varname = nemu.emu.readMemString(varnameptr)
-    print("getenv_s(0x%x, 0x%x, 0x%x, %r)" % (pRetVal, buff, numElem, varname))
+    logger.info("getenv_s(0x%x, 0x%x, 0x%x, %r)" % (pRetVal, buff, numElem, varname))
 
     os = vw.getMeta('Platform')
     if os in ('windows', 'winkern'):
@@ -2484,14 +2487,14 @@ def getenv_s(emu, op=None):
     # figure out how to return
     if not pRetVal:
         # can't actually put any meaningful response.
-        print("no pRetVal! EINVAL")
+        logger.info("no pRetVal! EINVAL")
         result = EINVAL
 
     elif val is None:
         # throw a tantrum, couldn't find it mom!
         emu.writeMemoryPtr(pRetVal, 0)
         result = EINVAL
-        print("couldn't find %r! EINVAL" % varname)
+        logger.info("couldn't find %r! EINVAL" % varname)
 
     else:
         # found it...
@@ -2729,7 +2732,7 @@ class Win32Registry(e_config.EnviConfig):
 
     def getRegistryKey(self, longname):
         self.accesstracker[longname] += 1
-        print("getRegistryKey(%r)" % longname)
+        logger.info("getRegistryKey(%r)" % longname)
         keys = longname.split(self.conjbyte)
         subthing = self
 
@@ -2746,15 +2749,14 @@ class Win32Registry(e_config.EnviConfig):
 
         try:
             if not self.getRegistryKey(key):
-                print("Trying to Open Registry Key: %r (doesn't exist)" % key)
+                logger.info("Trying to Open Registry Key: %r (doesn't exist)" % key)
                 return
 
         except Exception as e:
-            print("FAILURE in registry: %r" % e)
-            traceback.print_exc()
+            logger.info("FAILURE in registry: %r" % e, exc_info=1)
             return
 
-        print("RegOpenKeyExA(%r, %r, 0x%x, 0x%x) => %r" % (hkeystr, SubKeyStr, ulopts, samDesired, key))
+        logger.info("RegOpenKeyExA(%r, %r, 0x%x, 0x%x) => %r" % (hkeystr, SubKeyStr, ulopts, samDesired, key))
         #hidx = next(self.handlenum)
         hidx = len(self.handles)
         status = REG_STAT_OPEN
@@ -2786,19 +2788,18 @@ class Win32Registry(e_config.EnviConfig):
         rval = self.getRegistryKey(key)
         try:
             if not rval:
-                print("Trying to Open Registry Key: %r (doesn't exist)" % key)
+                logger.info("Trying to Open Registry Key: %r (doesn't exist)" % key)
                 return
 
         except Exception as e:
-            print("FAILURE in registry: %r" % e)
-            traceback.print_exc()
+            logger.info("FAILURE in registry: %r" % e, exc_info=1)
             return
 
         rtype = None
         try:
             rtype = self.getRegistryKey(keytype)
         except Exception as e:
-            print("no type info found, using stored data type defaults: %r" % e)
+            logger.info("no type info found, using stored data type defaults: %r" % e)
 
         if not rtype:
             rtype = reg_type_map.get(type(rval))
@@ -2819,7 +2820,7 @@ class Win32Registry(e_config.EnviConfig):
 
 
         rtypestr = reg_types_lookup.get(rtype)
-        print("RegQueryValueExA(%r, %r, 0x%x, 0x%x) => %r: %r" % (hkeystr, ValueName, ulopts, samDesired, rtypestr, rval))
+        logger.info("RegQueryValueExA(%r, %r, 0x%x, 0x%x) => %r: %r" % (hkeystr, ValueName, ulopts, samDesired, rtypestr, rval))
         return rtype, rval
 
     def RegCloseKey(self, hkey):
@@ -3061,11 +3062,11 @@ class Kernel(dict):
             mode = 'b' + mode
 
         pathmaps = self.pathmaps
-        print("Attempting to open external file: %r")
+        logger.info("Attempting to open external file: %r")
         fakepath, realpath = findExtPath(pathmaps, libFilePath, not self.isFsCaseSensitive(), kernel=self, matchFnOnly=False)
         realfile = open(realpath, mode)
         retval = self.registerFd(realfile)
-        print("openExtFile: retval=%r" % retval)
+        logger.info("openExtFile: retval=%r" % retval)
 
         # TODO: exception handling?
         return retval, realfile
@@ -3196,7 +3197,7 @@ class WinKernel(Kernel):
                 self.initFakePEB(vermaj=vermaj, vermin=vermin, arch=arch)
 
         except ImportError as e:
-            print("error importing VStructs for Windows %d.%d_%s: %r" % (vermaj, vermin, arch, e))
+            logger.warning("error importing VStructs for Windows %d.%d_%s: %r" % (vermaj, vermin, arch, e))
         
 
     def isFsCaseSensitive(self):
@@ -3223,17 +3224,17 @@ class WinKernel(Kernel):
         if freecnt:     # if we've already freed this library...
             if loadcnt == freecnt:
                 # something is wrong
-                print("loadLibrary(0x%x, %r) called and BEEN FREED TOO MANY TIMES (freed: %r load: %r)"\
+                logger.info("loadLibrary(0x%x, %r) called and BEEN FREED TOO MANY TIMES (freed: %r load: %r)"\
                         % (va, libname, freecnt, loadcnt))
 
             elif loadcnt == freecnt+1:
                 # this is a reload 
-                print("loadLibrary(0x%x, %r) Reload" % (va, libname))
+                logger.info("loadLibrary(0x%x, %r) Reload" % (va, libname))
                 # should we unload and reload the memory maps?  or just skip emulating the __entry?
                 syncEmuWithVw(self.emu.vw, self.emu, name=libname, refresh=True)
 
         else:   # first time load
-            print("loadLibrary(0x%x, %r) loading" % (va, libname))
+            logger.info("loadLibrary(0x%x, %r) loading" % (va, libname))
 
 
     def getStackInfo(self):
@@ -3309,7 +3310,7 @@ class WinKernel(Kernel):
         arg1 = emu.readMemoryPtr(sp + (2*emu.psize))
         arg2 = emu.readMemoryPtr(sp + (3*emu.psize))
 
-        print("ntDbgQueryDebugFilterState( 0x%x, 0x%x )" % (arg1, arg2))
+        logger.info("ntDbgQueryDebugFilterState( 0x%x, 0x%x )" % (arg1, arg2))
         # for now
         retval = 0
         emu.setRegister(0, retval)
@@ -3522,7 +3523,7 @@ class WinKernel(Kernel):
         arg1 = emu.readMemoryPtr(sp + (2*emu.psize))
         arg2 = emu.readMemoryPtr(sp + (3*emu.psize))
 
-        print("ntQueryAttributesFile( 0x%x, 0x%x )" % (arg1, arg2))
+        logger.info("ntQueryAttributesFile( 0x%x, 0x%x )" % (arg1, arg2))
 
         length, rootdir, objname, attrib, secdesc, secqos = \
                 emu.readMemoryFormat(arg1, "<IPPIPP")
@@ -3537,7 +3538,7 @@ class WinKernel(Kernel):
             rootdirstruct = self.parseUnicodeString(emu, rootdir)
             fullpath = emu.readMemory(rootdirstruct.Buffer, rootdirstruct.Length) + fullpath
 
-        print("FullPath: %r" % fullpath)
+        logger.info("FullPath: %r" % fullpath)
         # work in ROOTPATH here... right now, just fake
         f = self['fs'][fullpath]
         f['attribmask'] = attrib
@@ -3552,7 +3553,7 @@ class WinKernel(Kernel):
         CreationTime = int(self.getWinAbsTime(time.time()))
         Attributes = attrib
 
-        print("len:%x rootdir:%x objname:%x attrib:%x secdesc:%x secqos:%x" %(length, rootdir, objname, attrib, secdesc, secqos))
+        logger.info("len:%x rootdir:%x objname:%x attrib:%x secdesc:%x secqos:%x" %(length, rootdir, objname, attrib, secdesc, secqos))
         
         # now we need to write the output data!
         emu.writeMemoryFormat(arg2, '<QQQQI', CreationTime, AccessTime, WriteTime, ChangeTime, Attributes)
@@ -3574,10 +3575,10 @@ class WinKernel(Kernel):
         arg5 = emu.readMemoryPtr(sp + (6*emu.psize))    # in: ShareAccess
         arg6 = emu.readMemoryPtr(sp + (7*emu.psize))    # in: OpenOptions
 
-        print("ntOpenFile( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg1, arg2, arg3, arg4, arg5, arg6))
+        logger.info("ntOpenFile( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg1, arg2, arg3, arg4, arg5, arg6))
         length, rootdir, objname, attrib, secdesc, secqos = \
                 emu.readMemoryFormat(arg3, "<IPPIPP")
-        print("  OBJECT_ATTRIBUTES: %r %r %r %r %r %r" % (length, rootdir, objname, attrib, secdesc, secqos))
+        logger.info("  OBJECT_ATTRIBUTES: %r %r %r %r %r %r" % (length, rootdir, objname, attrib, secdesc, secqos))
         import envi.interactive as ei; ei.dbg_interact(locals(), globals())
 
 
@@ -3596,7 +3597,7 @@ class WinKernel(Kernel):
         arg4 = emu.readMemoryPtr(sp + (5*emu.psize))
         arg5 = emu.readMemoryPtr(sp + (6*emu.psize))
 
-        print("ntCreateSection( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg0, arg1, arg2, arg3, arg4, arg5))
+        logger.info("ntCreateSection( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg0, arg1, arg2, arg3, arg4, arg5))
         import envi.interactive as ei; ei.dbg_interact(locals(), globals())
 
         # for now
@@ -3614,7 +3615,7 @@ class WinKernel(Kernel):
         arg4 = emu.readMemoryPtr(sp + (5*emu.psize))
         arg5 = emu.readMemoryPtr(sp + (6*emu.psize))
 
-        print("ntMapViewOfSection( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg0, arg1, arg2, arg3, arg4, arg5))
+        logger.info("ntMapViewOfSection( 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x )" % (arg0, arg1, arg2, arg3, arg4, arg5))
         import envi.interactive as ei; ei.dbg_interact(locals(), globals())
 
         # for now
@@ -3623,7 +3624,7 @@ class WinKernel(Kernel):
 
     def _dllonexit(self, va, func, pbegin, pend):
         if va in self.dllonexits:
-            print("overwriting dllonexits[0x%x]" % va)
+            logger.info("overwriting dllonexits[0x%x]" % va)
 
         self.dllonexits[va] = (func, pbegin, pend)
 
@@ -3854,7 +3855,7 @@ class NinjaEmulator:
                 self._remotevw.followTheLeader(self._uuid, locstr)
 
             except Exception as e:
-                print("FAILED TO LEAD (followTheLeader() failed): %r" % e)
+                logger.warning("FAILED TO LEAD (followTheLeader() failed): %r" % e)
 
 
     def connectToWsServer(self, server, vwname=None, username=None, sessionname=None):
@@ -4097,7 +4098,7 @@ class NinjaEmulator:
 
             if name in import_map:
                 self.call_handlers[va] = import_map.get(name)
-                print("Mapping call_handler by *name*: %r => 0x%x" % (name, va))
+                logger.info("Mapping call_handler by *name*: %r => 0x%x" % (name, va))
 
     def setupCall(self, fva, ezargs=[], retaddr=0x47145, ccname=None):
         '''

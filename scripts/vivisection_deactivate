@@ -1,0 +1,36 @@
+#!/usr/bin/python3
+import sys
+import envi.config as e_config
+
+from vivisection import viv_plugin
+
+def doDeactivation(args):
+    '''
+    Deactivation
+    '''
+    delpaths = list(args)
+
+    # if we hand in a directory, that will be used only.  otherwise, go hunting!
+    if len(delpaths) == 0:
+        delpaths.append(e_config.gethomedir('.viv', 'plugins'))
+
+        extpath = os.environ.get('VIV_EXT_PATH')
+        if extpath:
+            if ':' in extpath:
+                # grab the last in the VIV_EXT_PATH
+                delpaths.extend(extpath.split(':'))
+                
+            else:
+                # there's only one here
+                delpaths.append(extpath)
+
+
+    for delpath in delpaths:
+        vivisection_plugin = os.join([delpath, 'VivisectION'])
+        if os.path.exists(vivisection_plugin) and os.path.islink(vivisection_plugin):
+            print("Removing plugin from: '%s'" % vivisection_plugin)
+
+            os.remove(vivisection_plugin)
+
+if __name__ == '__main__':
+    doDeactivation(sys.argv[1:])

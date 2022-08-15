@@ -41,7 +41,7 @@ def shareWorkspace(vw, doref=False):
     cobra.dcode.enableDcodeServer(daemon=daemon)
     cobra.remoteapp.shareRemoteApp('vivisect.remote.client', appsrv=vw, daemon=daemon)
     vw.server = SharedVivWorkspace(vw)
-    updateGuiMenus(vw)
+    #updateGuiMenus(vw)
         
     print(vw.server)
     return daemon

@@ -58,6 +58,7 @@ class IonToolbar(QToolBar):
         self.addAction('CLI', self.cli)
 
     def cli(self):
+        # TODO: make this and FuncEmulator 1-shot/mutex, since there can be only one (console)
         vw = self.vw
         vwgui = self.vwgui
 

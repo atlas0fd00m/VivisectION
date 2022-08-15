@@ -25,7 +25,7 @@ setup  (name        = 'VivisectION',
         packages = find_packages(),
         package_data = pkgdata,
         install_requires = [
-            'vivisect[gui]>=1.0.8'
+            'vivisect>=1.0.8'
         ],
         ext_modules = mods,
         scripts = scripts

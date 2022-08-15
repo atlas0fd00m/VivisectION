@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+import os
+import sys
 import envi.config as e_config
 
 from vivisection import viv_plugin
@@ -27,13 +29,13 @@ def doActivation(args):
             gopath = e_config.gethomedir('.viv', 'plugins')
 
 
-    vivisection_plugin = os.join([gopath, 'VivisectION'])
+    vivisection_plugin = os.sep.join([gopath, 'VivisectION'])
     if os.path.exists(vivisection_plugin):
         print("Cannot reinstall existing VivisectION plugin.  Uninstall first using vivisection_deactivate.")
         print("  '%s' already exists:" % vivisection_plugin)
         sys.exit(-1)
 
-    os.symlink(viv_plugin.__path__, vivisection_plugin)
+    os.symlink(viv_plugin.__path__[0], vivisection_plugin)
 
 if __name__ == '__main__':
     doActivation(sys.argv[1:])

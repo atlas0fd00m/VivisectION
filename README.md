@@ -60,7 +60,23 @@ The following tools will manage a symlink to the plugin directory into $HOME/.vi
 
 * Other goodies as I decide to release them (probably expect FuncRecon shortly)
 
+## Getting Started
 
+* "Activate" the plugin
+* Start vivbin from a console (not an icon that hides the console)
+* Click the CLI button to get an interactive python session in the console with `vw` as the VivWorkspace
+* Right Click on a Function address and choose `SmartEmu - console` from the context menu.
+** Modify (if desired) the emulator setup in the pop-up window
+** Get a NinjaEmulator in the console window
+** After you quit the NinjaEmulator, you'll get dropped into iPython.  Ctrl-D or exit to get out (before emulating anything else)
+
+
+## FAQ:
+* <xyz> happened and now my command line won't show me typing anything
+** Type (blind, I know)  `stty sane` and press enter.  This normally sets the terminal back to normal (sane).
+
+
+## Blessing
 
 go forth and hack great things!
 

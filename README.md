@@ -8,7 +8,23 @@ Primarily this plugin allows the GUI to easily setup an emulator for Functions (
 
 
 ## Installation:
-Install using Pip:
+
+Install Vivisect and make sure it works before installing VivisectION.  
+
+On Ubuntu, install PyQt5 and PyQtWebkit via apt:
+```
+    $ sudo apt install python3-pyqt5 python3-pyqt5.qtwebkit
+```
+
+On other Linux, you may find either of these work.  On Ubuntu, PyPi's PyQt5 installation somehow breaks things.
+
+On Windows (and possibly some Linuxes), be sure to include the [gui] option:
+```
+    $ pip install vivisect[gui]
+```
+
+
+Then install VivisectION using Pip:
 ```
     $ pip install VivisectION
 ```
@@ -20,12 +36,13 @@ Alternately, you can install from the latest Github repo (or using a modified fo
     $ pip install ./VivisectION
 ```
 
+
 ### You must first activate the plugin:
 The following tools will manage a symlink to the plugin directory into $HOME/.viv/plugins/ (or the last directory in your VIV_EXT_PATH)
 ```
-    $ vivisection_activate 
+    $ vivisection_activate      # to install the plugin
         # and 
-    $ vivisection_deactivate
+    $ vivisection_deactivate    # to remove the plugin
 ```
 
 ## Features:

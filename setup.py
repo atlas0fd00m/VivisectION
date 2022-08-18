@@ -2,6 +2,8 @@ import os
 import sys
 from setuptools import find_packages, setup
 
+dirn = os.path.abspath(os.path.dirname(__file__))
+
 VERSION = open('VERSION').read().strip()
 with open(os.path.join(dirn, 'README.md'), 'r') as fd:
     desc = fd.read()

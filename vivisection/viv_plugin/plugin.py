@@ -96,7 +96,8 @@ class IonManager:
 
         # share out the workspace
         # FIXME: check if connected to a VivServer and support that instead
-        self.daemon = ion_share.shareWorkspace(vw)
+        # FIXME: setting this as the server causes saving to stop working.  need to work around another method of enabling the "Follow/Lead" in the gui.  probably an upstream problem to solve.  for now, we have the console.
+        #self.daemon = ion_share.shareWorkspace(vw)
 
     def addSession(self, sessid, sesstup):
         if sessid in self.sessions:

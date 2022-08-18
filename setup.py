@@ -2,7 +2,7 @@ import os
 import sys
 from setuptools import find_packages, setup
 
-VERSION = '0.9.0'
+VERSION = '0.9.1'
 desc = 'VivisectION Emulation-Driven Reversing Toolset'
 
 mods = []

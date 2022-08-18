@@ -35,7 +35,7 @@ import vivisect.symboliks.analysis as vs_anal
 
 from binascii import hexlify, unhexlify
 
-from atlasutils.errno import *
+from vivisection.errno import *
 from envi.expression import ExpressionFail
 from envi.const import MM_READ, MM_WRITE, MM_EXEC
 from vstruct.primitives import v_uint16, v_uint32, v_uint64

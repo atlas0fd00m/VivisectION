@@ -1,4 +1,4 @@
-# VivisectION
+# VivisectION Emulation-Driven Reversing Toolset
 
 VivisectION is the cross-section of GUI Reversing, Emulation and Debugging, with an emphasis on using Emulation and other powerful Vivisect toys to aid in Reverse Engineering and Vulnerability Research.
 

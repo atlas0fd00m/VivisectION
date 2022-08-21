@@ -1,5 +1,10 @@
+import logging
+
 import cobra.dcode
 import cobra.remoteapp
+
+logger = logging.getLogger(__name__)
+
 
 class SharedVivWorkspace:
     ''' 

@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import os
 import sys
 import envi.config as e_config
 
@@ -26,7 +27,7 @@ def doDeactivation(args):
 
 
     for delpath in delpaths:
-        vivisection_plugin = os.join([delpath, 'VivisectION'])
+        vivisection_plugin = os.sep.join([delpath, 'VivisectION'])
         if os.path.exists(vivisection_plugin) and os.path.islink(vivisection_plugin):
             print("Removing plugin from: '%s'" % vivisection_plugin)
 

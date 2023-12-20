@@ -3926,8 +3926,8 @@ import_map = {
         'advapi32.RegOpenKeyExA': RegOpenKeyExA,
         'advapi32.RegQueryValueExA': RegQueryValueExA,
         'advapi32.RegCloseKey': RegCloseKey,
+        #'advapi32.GetUserNameA': GetUserNameA,
         }
-
 
 class NinjaEmulator:
     def __init__(self, emu, vw=None, start=None, verbose=False, fakePEB=False, guiFuncGraphName=None, hookfuncsbyname=False, **kwargs):

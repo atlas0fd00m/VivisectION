@@ -14,10 +14,14 @@ import uuid
 import threading
 import traceback
 
+import envi
 import envi.interactive as ei
 import envi.config as e_config
 import envi.threads as e_thread
 
+import vivisect
+
+import vivisection.demangle as ion_demangle
 import vivisection.viv_plugin.share as ion_share
 
 
@@ -29,11 +33,93 @@ from vqt.basics import VBox
 from vqt.common import ACT
 
 
+def demangleNameAtVa(vw, va):
+    '''
+    Demangle string at a given address.
+    ion_demangle requires Internet access (Access to demangler.com)
+    '''
+    curnm = vw.getName(va)
+    if curnm is None:
+        vprint(vw, "demangleNameAtVa(0x%x) -> No name found" % va)
+        return
+
+    newnm = ion_demangle.demangle(curnm)
+    if newnm != curnm:
+        if curnm.endswith("_%.8x" % va) and not newnm.endswith("_%.8x" % va):
+            newnm += ("_%.8x" % va)
+
+        vprint(vw, "%r  !=  %r   -> Updating" % (curnm, newnm))
+        vw.makeName(va, newnm)
+    else:
+        vprint(vw, "response from demangle.com: %r" % (newnm))
+
+def readMemString(self, va, maxlen=0xfffffff, wide=False):
+    '''
+    Returns a C-style string from memory.  Stops at Memory Map boundaries, or the first NULL (\x00) byte.
+    '''
+
+    terminator = (b'\0', b'\0\0')[wide]
+    for mva, mmaxva, mmap, mbytes in self._map_defs:
+        if mva <= va < mmaxva:
+            mva, msize, mperms, mfname = mmap
+            if not mperms & envi.MM_READ:
+                raise envi.SegmentationViolation(va)
+            offset = va - mva
+
+            # now find the end of the string based on either \x00, maxlen, or end of map
+            end = mbytes.find(terminator, offset)
+
+            left = end - offset
+            if end == -1:
+                # couldn't find the NULL byte
+                mend = offset + maxlen
+                cstr = mbytes[offset:mend]
+            else:
+                # couldn't find the NULL byte go to the end of the map or maxlen
+                mend = offset + (maxlen, left)[left < maxlen]
+                cstr = mbytes[offset:mend]
+            return cstr
+
+    raise envi.SegmentationViolation(va)
+
+def renameFullString(vw, va, maxsz=200):
+    '''
+    Rename a string to include more of the string (up to maxsz, default=200)
+    '''
+    loc = vw.getLocation(va)
+    if not loc:
+        vprint(vw, "renameFullString(0x%x) -> No string location found" % va)
+        return
+
+    lva, lsz, ltype, ltinfo = loc
+    if ltype not in (vivisect.LOC_STRING, vivisect.LOC_UNI):
+        vprint(vw, "renameFullString(0x%x) -> Location *isn't* String or Unicode" % va)
+        return
+
+    curnm = vw.getName(va)
+    string = readMemString(vw, va, maxsz, bool(ltype==vivisect.LOC_UNI))
+    if curnm is None or not string:
+        vprint(vw, "renameFullString(0x%x) -> No string/name found" % va)
+        return
+
+    string = string.decode('utf8')
+    if ltype == vivisect.LOC_STRING:
+        newnm = "str_%s_%.8x" % (string, va)
+    else:
+        newnm = "wstr_%s_%.8x" % (string, va)
+
+    if newnm != curnm:
+        vw.makeName(va, newnm)
+        vprint(vw, "%r  !=  %r   -> Updating" % (repr(curnm), repr(newnm)))
+
 
 ### standard UI stuff
 def vprint(vw, s, *args, **kwargs):
     vw.vprint(s % args)
     print(s % args)
+
+def reanalyzeFunction(vw, va):
+    vw.analyzeFunction(va)
 
 def ctxMenuHook(vw, va, expr, menu, parent, nav):
     '''
@@ -44,6 +130,12 @@ def ctxMenuHook(vw, va, expr, menu, parent, nav):
             # FIXME: make shared workspace mode work correctly, then uncomment:
             #menu.addAction('SmartEmu', ACT(launchEmuShared, vw, "0x%x"%va))
             menu.addAction('SmartEmu - console', ACT(launchEmuLocal, vw, "0x%x"%va))
+            menu.addAction('Reanalyze Function', ACT(reanalyzeFunction, vw, va))
+
+        if vw.getName(va):
+            # if it has a name, let's offer the option of demangling
+            menu.addAction('Demangle Name', ACT(demangleNameAtVa, vw, va))
+            menu.addAction('Rename String Bigger', ACT(renameFullString, vw, va))
 
     except Exception as e:
         traceback.print_exc()
@@ -116,6 +208,9 @@ class IonManager:
     def isConsoleInUse(self):
         return self.console_in_use
 
+    def resetConsoleInUse(self):
+        self.console_in_use = False
+
     def setUsingConsole(self, state=True):
         self.console_in_use = state
 
@@ -126,14 +221,25 @@ def getSetupCode(vw, fvaexpr):
     defcode = vw._ionmgr.config.setup_code
     defcode = defcode % fvaexpr
     fva = vw.parseExpression(fvaexpr)
-    initialcode = vw._ionmgr.config.cache.get(fva, defcode)
+
+    # grab cache/saved-config
+    faotup = vw.getFileAndOffset(fva)
+    if faotup:
+        fname, fbase, foff = faotup
+    else:
+        fname, fbase, foff = "___LOST___", 0, fva
+    filecfg = vw._ionmgr.config.cache.getSubConfig(fname)
+
+    # see if there's existing config for this function:
+    initialcode = filecfg.get(foff, defcode)
 
     setup_code, ok = QInputDialog.getMultiLineText(None, 'Enter Setup Code', 'Code:', text=initialcode)
     if ok:
-        vw._ionmgr.config.cache.fva = setup_code
+        print("caching code:\n%r + 0x%x:\n%r" % (fname, foff, setup_code))
+        filecfg[foff] = setup_code
         vw._ionmgr.config.saveConfigFile()
         return setup_code
-  
+
 def launchEmuShared(vw, fvaexpr):
     # TODO: fix up Vivisect's Shared Workspace.  there are a few bugs remaining.
     #### THIS DOESN'T WORK CORRECTLY YET....
@@ -200,6 +306,7 @@ def vivExtension(vw, vwgui):
 
     # Add a menu item
     vwgui.vqAddMenuField('&Plugins.&Ion.&PrintDiscoveredStats', vw.printDiscoveredStats, ())
+    vwgui.vqAddMenuField('&Plugins.&Ion.&Reset Console In Use', vw._ionmgr.resetConsoleInUse, ())
 
     # hook context menu
     vw.addCtxMenuHook('ion', ctxMenuHook)

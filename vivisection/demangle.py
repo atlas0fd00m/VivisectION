@@ -23,4 +23,21 @@ def demangle(mangname):
     if resp.status_code != 200:
         raise DemangleException(resp)
 
-    return resp.content
+    return resp.content.decode('utf8')
+
+def dmangleVw(vw, apply=False):
+    deltas = {}
+
+    for nva, name in vw.getNames():
+        dmname = demangle(name)
+        if dmname != name:
+            inp = input("Apply? 0x%x:   %r  ==>  %r" % (nva, name, dmname))
+            if inp.upper().startswith("Y"):
+                deltas[nva] = (name, dmname)
+
+    # do something...
+    if apply:
+        for nva, (name, dmname) in deltas.items():
+            vw.makeName(nva, dmname)
+
+    return deltas

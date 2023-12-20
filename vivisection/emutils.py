@@ -881,6 +881,20 @@ def strrchr(emu, op=None):
     cconv.execCallReturn(emu, retval, 0)
     return retval
 
+def libcstrrchr(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    cstr, char = cconv.getCallArgs(emu, 2)
+    initial = readString(emu, cstr)
+    idx = initial.rfind(char)
+    if idx == -1:
+        retval = 0
+    else:
+        retval = cstr + idx
+    
+    logger.info("strrchr(%r, %r)" % (initial, char))
+    cconv.execCallReturn(emu, retval, 0)
+    return retval
+
 def strlen(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     start, = cconv.getCallArgs(emu, 1)
@@ -955,6 +969,81 @@ def strdup(emu, op=None):
     emu.writeMemory(dupe, string)
 
     cconv.execCallReturn(emu, dupe, 1)
+
+
+def textdomain(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    dirname, = cconv.getCallArgs(emu, 1)
+
+    logger.info("textdomain(%x)" % (dirname))
+    kernel = emu.getMeta('kernel')
+    kernel.settextdomain(dirname)
+
+    cconv.execCallReturn(emu, dirname, 2)
+
+def bindtextdomain(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    domainname, dirname = cconv.getCallArgs(emu, 2)
+
+    logger.info("bindtextdomain(%x, %x)" % (domainname, dirname))
+    kernel = emu.getMeta('kernel')
+    kernel.bindtextdomain(domainname, dirname)
+
+    cconv.execCallReturn(emu, dirname, 2)
+
+
+def setlocale(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    cat, plocale = cconv.getCallArgs(emu, 2)
+
+    logger.info("setlocale(%x, %x)" % (cat, plocale))
+    kernel = emu.getMeta('kernel')
+    kernel.setLocale((cat, plocale))
+
+    cconv.execCallReturn(emu, plocale, 2)
+
+def cxa_atexit(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    pfunc, = cconv.getCallArgs(emu, 1)
+
+    logger.info("cxa_atexit(%x)" % (pfunc))
+    kernel = emu.getMeta('kernel')
+    kernel.atexit(pfunc)
+
+    cconv.execCallReturn(emu, 0, 1)
+
+def errno_location(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    pfunc, = cconv.getCallArgs(emu, 1)
+
+    logger.info("errno_location(%x)" % (pfunc))
+    kernel = emu.getMeta('kernel')
+    kernel.atexit(pfunc)
+
+    cconv.execCallReturn(emu, 0, 1)
+
+def getopt_long(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    argc, argv, poptstring, plongopts, plongindex = cconv.getCallArgs(emu, 5)
+
+    logger.info("getopt_long(%x, %x, %x, %x, %x)" % (argc, argv, poptstring, plongopts, plongindex))
+    kernel = emu.getMeta('kernel')
+
+    retval = -1
+
+    cconv.execCallReturn(emu, retval, 5)
+
+
+def libc_start_main(emu, op=None):
+    ccname, cconv = getLibcCallConv(emu)
+    main, = cconv.getCallArgs(emu, 1)
+
+    logger.info("libc_start_main(%x)" % (main))
+
+    ### SETUP ARGC, ARGV arrays in memory, set Args)
+    arglist = ["exename", 'exe_arg0']
+    argv = makeArgArray(emu, arglist)
+    emu.nemu.setupCall(main, (1, argv))
 
 
 #### Win32 helper functions
@@ -1888,6 +1977,36 @@ def GetProcAddress(emu, op=None):
     cconv.execCallReturn(emu, result, 2)
 
 
+def GetModuleHandleW(emu, op=None):
+    '''
+    kernel32.GetModuleHandleW
+    '''
+    kernel = emu.getMeta('kernel')
+    ccname, cconv = getMSCallConv(emu, op.va)
+    lpFilename, = cconv.getCallArgs(emu, 1)
+    if lpFilename:
+        filename = readMemString(emu, lpFilename, wide=True)
+        logger.warning("GetModuleHandleW(0x%x)   %r" % (lpFilename, filename))
+        print("GetModuleHandleW(0x%x)   %r" % (lpFilename, filename))
+        raise Exception("IMPLEMENT ME: GetModuleHandleW(modulename)")
+    else:
+        filename = b''
+        logger.info("GetModuleHandleW(0x%x)" % (lpFilename, ))
+
+        moduleva = cconv.getReturnAddress(emu)
+        mmap = emu.getMemoryMap(moduleva)
+        filename = mmap[vivisect.MAP_FNAME]
+
+    modulebase = emu.vw.getFileMeta(filename, "imagebase")
+    logger.warning('  returning ImageBase of file %r: %r', filename, modulebase)
+
+    cconv.execCallReturn(emu, modulebase, 1)
+
+
+
+
+
+
 def GetModuleFileNameA(emu, op=None):
     '''
     kernel32.GetModuleFileNameA
@@ -2561,6 +2680,17 @@ def GetErrorMode(emu, op=None):
 
     cconv.execCallReturn(emu, kernel.errormode, 0)
 
+def GetUserNameA(emu, op=None):
+    kernel = emu.getMeta('kernel')
+    ccname, cconv = getMSCallConv(emu, op.va)
+
+    lpBuffer, pcbBuffer = cconv.getCallArgs(emu, 2)
+    bufsize = emu.readMemoryPtr(pcbBuffer)
+    emu.writeMemory(lpBuffer, "DummUser"[:bufsize])
+
+    cconv.execCallReturn(emu, 1, 2)
+
+
 class win32const:
     FILE_ATTRIBUTE_ARCHIVE = 32 #(0x20) A file or directory that is an archive file or directory. Applications typically use this attribute to mark files for backup or removal .
     FILE_ATTRIBUTE_COMPRESSED = 2048 #(0x800) A file or directory that is compressed. For a file, all of the data in the file is compressed. For a directory, compression is the default for newly created files and subdirectories.
@@ -2894,6 +3024,11 @@ class Kernel(dict):
         self.fs_polprompt = True
 
         self.errno = 0
+        self.locale = 0
+        self.textdomains = {}
+        self.textdomain = 0
+
+        self._atexit_funcs = []
 
         # setup key files db here
         self.pathmaps = kwargs.get('pathmaps', [])
@@ -3102,6 +3237,18 @@ class Kernel(dict):
         
         ## next check the mapped in filesystem
         return self.openExtFile(filename, mode)
+
+    def setLocale(self, localetup):
+        self.locale = localetup
+
+    def bindtextdomain(self, domainname, dirname):
+        self.textdomains[domainname] = dirname
+
+    def settextdomain(self, dirname):
+        self.textdomain = dirname
+
+    def atexit(self, pfunc):
+        self._atexit_funcs.append(pfunc)
 
     def op_sysenter(self, emu, op):
         # handle select Kernel syscalls
@@ -3667,6 +3814,7 @@ import_map = {
         '*.strlen': strlen,
         '*.strstr': strstr,
         '*.strchr': strchr,
+        '*.strrchr': libcstrrchr,
         '*.strcmp': strcmp,
         '*.strncmp': strncmp,
         '*.strcat': strcat,
@@ -3678,6 +3826,14 @@ import_map = {
         '*.memcpy_s': memcpy_s,
         '*.memmove_s': memmove_s,
         '*.memset': memset,
+        '*.getenv': getenv,
+        '*.__libc_start_main': libc_start_main,
+        '*.setlocale': setlocale,
+        '*.bindtextdomain': bindtextdomain,
+        '*.textdomain': textdomain,
+        '*.__cxa_atexit': cxa_atexit,
+        '*.__errno_location': errno_location,
+        '*.getopt_long': getopt_long,
         'kernel32.Sleep': Sleep,
         'kernel32.HeapAlloc': HeapAlloc,
         'kernel32.HeapFree': HeapFree,
@@ -3717,6 +3873,7 @@ import_map = {
         'kernel32.LoadLibraryExA': LoadLibraryExA,  # this is the yucky one
         'kernel32.GetProcAddress': GetProcAddress,  # tied to LoadLibrary
         'kernel32.GetModuleFileNameA': GetModuleFileNameA,
+        'kernel32.GetModuleHandleW': GetModuleHandleW,
         'kernel32.CreateMutexA': CreateMutexA,
         'kernel32.ReleaseMutex': ReleaseMutex,
         'kernel32.WaitForSingleObject': WaitForSingleObject,
@@ -4459,6 +4616,9 @@ class NinjaEmulator:
                         self.printStats(i)
                     break
 
+                #print("0x%x:   tova: %r\tnonstop: %r\tquit: %r\tmoveon: %r\temuBranch: %r\tsilentUntil: %r" % \
+                        #(pc, self.tova, self.nonstop, self.quit, self.moveon, self.emuBranch, self.silentUntil))
+
                 if pc in self.bps:
                     print("BREAKPOINT HIT!  0x%x" % pc)
                     self.printStats(i)
@@ -4770,9 +4930,12 @@ class NinjaEmulator:
 
                 if self.moveon:
                     continue
+                ###
+                # actually do execution/hooking
 
                 if op.isCall() or op.iflags & envi.IF_BRANCH:
                     skip, skipop = self.handleBranch(op, skip, skipop)
+
 
                 # if not already emulated a call, execute the instruction here...
                 if not skip and not skipop:
@@ -4832,8 +4995,14 @@ class NinjaEmulator:
             except envi.SegmentationViolation:
                 pc = emu.getProgramCounter()
                 taint = emu.getVivTaint(pc)
-                if op.isCall() or op.iflags & envi.IF_BRANCH and taint:
+                if self.quit:
+                    print("Segmentation Violation, but in process of quitting.")
+                    self.resetNonstop()
+                    break
+
+                elif op.isCall() or op.iflags & envi.IF_BRANCH and taint:
                     skip, skipop = self.handleBranch(op, skip, skipop)
+
                 else:
                     sys.excepthook(*sys.exc_info())
                     print("Exception at instruction #%d (0x%x)" % (i, pc))
@@ -4855,6 +5024,7 @@ class NinjaEmulator:
         '''
         '''
         emu = self.emu
+        taint = None
         handler = None
         for brva, brflags in op.getBranches(emu=emu):
             if brflags & envi.BR_FALL:
@@ -4865,6 +5035,8 @@ class NinjaEmulator:
                 if taint:
                     taintval, tainttype, tainttuple = taint
                     brva = tainttuple[0]
+                    #brflags |= BR_TAINT
+                    print("brva = tainttuple[0]:  %r" % repr(taint))
 
             self.dbgprint("brva: 0x%x  brflags: 0x%x" % (brva, brflags))
             handler = self.call_handlers.get(brva)
@@ -4905,6 +5077,13 @@ class NinjaEmulator:
                 emu.emumon.posthook(emu, op, endeip)
 
             self.dbgprint("starteip: 0x%x, endeip: 0x%x  -> %s" % (starteip, endeip, emu.vw.getName(endeip)))
+
+            taint = emu.getVivTaint(endeip)
+            if taint:
+                print("ProgramCounter is a Taint value.  May need to implement: %r   -- Halting" % emu.reprVivTaint(taint))
+                self.quit = True
+                return True, True
+
             if hasattr(emu, 'curpath'):
                 vg_path.getNodeProp(emu.curpath, 'valist').append(starteip)
             skip = True

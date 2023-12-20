@@ -321,6 +321,19 @@ def getWindowsDef(normname='ntdll', arch='i386', wver='6.1.7601', syswow=False):
 
     return mod
 
+def makeArgArray(emu, args=[]):
+    array = makeArgs(emu, args)
+    # now store the array in memory
+    heap = getHeap(emu)
+    ptr = heap.malloc(emu.psize * len(array))
+
+    off = 0
+    for item in array:
+        emu.writeMemoryPtr(ptr+off, item)
+        off += emu.psize
+
+    return ptr
+
 def makeArgs(emu, args=[]):
     '''
     This function takes a list of args and attempts to intelligently convert

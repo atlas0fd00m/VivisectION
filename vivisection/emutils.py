@@ -1012,6 +1012,41 @@ def cxa_atexit(emu, op=None):
 
     cconv.execCallReturn(emu, 0, 1)
 
+def ctype_get_mb_cur_max(emu, op=None):
+    '''
+    MB_CUR_MAX: Maximum length of a multibyte character in the current locale
+
+    The MB_CUR_MAX macro defines an integer expression giving the maximum number of bytes needed to represent a single wide character in the current locale. It is locale dependent and therefore not a compile-time constant.
+
+    The entities MB_LEN_MAX and sizeof(wchar_t) are totally unrelated.  In  glibc,  MB_LEN_MAX
+    is typically 16 (6 in glibc versions earlier than 2.2), while sizeof(wchar_t) is 4.
+
+    in the future, we'll have a lookup table for this value according to the value in the Kernel Locale info.
+    for now, we'll use a hard-coded value
+    '''
+    ccname, cconv = getLibcCallConv(emu)
+
+    MB_LEN_MAX = 16
+    MB_CUR_MAX = MB_LEN_MAX
+
+    logger.info("ctype_get_mb_cur_max() -> %d" % MB_LEN_MAX)
+
+    cconv.execCallReturn(emu, MB_CUR_MAX, 1)
+
+def dcgettext(emu, op=None):
+    '''
+    dcgettext -- perform domain and category specific lookup in message catalog
+
+    char * dcgettext(const char * domainname, const char * msgid, int category);
+    '''
+    ccname, cconv = getLibcCallConv(emu)
+    domainname, msgid, category = cconv.getCallArgs(emu, 3)
+
+    logger.info("dcgettext(%x, %x, %x)" % (domainname, msgid, category))
+    kernel = emu.getMeta('kernel')
+
+    cconv.execCallReturn(emu, 0, 1)
+
 def errno_location(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     pfunc, = cconv.getCallArgs(emu, 1)
@@ -3834,6 +3869,8 @@ import_map = {
         '*.__cxa_atexit': cxa_atexit,
         '*.__errno_location': errno_location,
         '*.getopt_long': getopt_long,
+        '*.__ctype_get_mb_cur_max': ctype_get_mb_cur_max,
+        '*.dcgettext': dcgettext,
         'kernel32.Sleep': Sleep,
         'kernel32.HeapAlloc': HeapAlloc,
         'kernel32.HeapFree': HeapFree,
@@ -5010,6 +5047,11 @@ class NinjaEmulator:
                     self.printStats(i)
                     break
 
+            except envi.InvalidInstruction:
+                print("Exception at instruction #%d (0x%x)" % (i, pc))
+                self.resetNonstop()
+                break
+
             except:
                 print("Exception at instruction #%d (0x%x)" % (i, pc))
                 self.printStats(i)
@@ -5066,6 +5108,10 @@ class NinjaEmulator:
 
 
         elif self._follow and not skip and not skipop:
+            logger.log(e_cmn.SHITE, 'taint: %r', repr(taint))
+            if taint:
+                raise Exception("NORMAL FOLLOW INTO A TAINT: %r" % taint)
+
             # use the emulator to execute the call
             starteip = emu.getProgramCounter()
             if hasattr(emu, 'emumon') and emu.emumon is not None:
@@ -5274,6 +5320,14 @@ class CallRetMonitor(vi_mon.AnalysisMonitor):
         return '\n'.join(out)
 
 
+def disLast(emu, count=100, printop=True):
+    out = []
+    for va in emu.path[2]['valist'][-count:]:
+        op = emu.parseOpcode(va)
+        out.append(op)
+        if printop:
+            print(op)
+    return out
 
 def main(argv):
     print("Currently running this file directly has no outcome.")

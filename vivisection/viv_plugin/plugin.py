@@ -228,6 +228,10 @@ def getSetupCode(vw, fvaexpr):
         fname, fbase, foff = faotup
     else:
         fname, fbase, foff = "___LOST___", 0, fva
+
+    # DEBUG: This is to resolve bad translation from VSnapshot to VivWorkspace and may cause problems!
+    fname = vw.normFileName(fname)
+
     filecfg = vw._ionmgr.config.cache.getSubConfig(fname)
 
     # see if there's existing config for this function:

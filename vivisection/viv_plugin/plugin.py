@@ -121,7 +121,7 @@ def vprint(vw, s, *args, **kwargs):
 def reanalyzeFunction(vw, va):
     vw.analyzeFunction(va)
 
-def ctxMenuHook(vw, va, expr, menu, parent, nav):
+def ctxMenuHook(vw, va, expr, menu, parent, nav, tags=None):
     '''
     Context Menu handler (adds options as we wish)
     '''

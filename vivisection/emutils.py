@@ -18,6 +18,7 @@ import collections
 import envi
 import envi.exc as e_exc
 import envi.memory as e_m
+import envi.common as e_cmn
 import envi.config as e_config
 import envi.expression as e_expr
 import envi.memcanvas as e_memcanvas
@@ -4950,10 +4951,12 @@ class NinjaEmulator:
                                             print(out)
                                     except KeyboardInterrupt:
                                         raise
-                                    except:
+                                    except Exception as e:
+                                        print("EXCEPTION: %r" % e)
                                         sys.excepthook(*sys.exc_info())
 
-                            except:
+                            except Exception as e:
+                                print("EXCEPTION: %r" % e)
                                 traceback.print_exc()
 
                             #self.printStats(i)
@@ -4980,7 +4983,8 @@ class NinjaEmulator:
                     failed = False
                     try:
                         emu.stepi()
-                    except e_exc.UnsupportedInstruction:
+                    except e_exc.UnsupportedInstruction as e:
+                        print("EXCEPTION AT stepi: %r" % e)
                         failed = True
                     except e_exc.BreakpointHit:
                         print("Breakpoint Hit!")
@@ -5025,7 +5029,6 @@ class NinjaEmulator:
                     emu.setProgramCounter(newpc)
 
             except KeyboardInterrupt:
-                self.printStats(i)
                 self.resetNonstop()
                 break
 
@@ -5110,7 +5113,7 @@ class NinjaEmulator:
         elif self._follow and not skip and not skipop:
             logger.log(e_cmn.SHITE, 'taint: %r', repr(taint))
             if taint:
-                raise Exception("NORMAL FOLLOW INTO A TAINT: %r" % taint)
+                raise Exception("NORMAL FOLLOW INTO A TAINT: %r" % repr(taint))
 
             # use the emulator to execute the call
             starteip = emu.getProgramCounter()

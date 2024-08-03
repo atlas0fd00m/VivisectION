@@ -18,7 +18,7 @@ On Ubuntu, install PyQt5 and PyQtWebkit via apt:
 
 On other Linux, you may find either of these work.  On Ubuntu, PyPi's PyQt5 installation somehow breaks things.
 
-On Windows (and possibly some Linuxes), be sure to include the [gui] option:
+On Windows (and possibly some Linuxes), be sure to include the [gui] option (it includes the PyQt5 components):
 ```
     $ pip install vivisect[gui]
 ```
@@ -74,6 +74,12 @@ The following tools will manage a symlink to the plugin directory into $HOME/.vi
 ## FAQ:
 * <xyz> happened and now my command line won't show me typing anything
 ** Type (blind, I know)  `stty sane` and press enter.  This normally sets the terminal back to normal (sane).
+
+* I can't get a CLI and a Function Emulator at the same time!
+** Sorry, I haven't created code required for Multi-function emulation.  Currently we only support using the main CLI used to start Vivisect.
+
+* I can't get a CLI *or* a Function Emulator!
+** Sometimes, the state of the CLI gets mucked up and we track that it's in use when it is not.  You can Reset this state using `Plugins`->`Ion`->`Reset Console In Use`
 
 
 ## Blessing

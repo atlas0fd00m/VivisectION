@@ -1048,6 +1048,18 @@ def dcgettext(emu, op=None):
 
     cconv.execCallReturn(emu, 0, 1)
 
+def socket(emu, op=None):
+    '''
+    '''
+    ccname, cconv = getLibcCallConv(emu)
+    domain, stype, protocol = cconv.getCallArgs(emu, 3)
+
+    logger.info("socket(%x, %x, %x)" % (domain, stype, protocol))
+    kernel = emu.getMeta('kernel')
+    kernel.sockets.append((domain, stype, protocol, {}))
+
+    cconv.execCallReturn(emu, 0, 3)
+
 def errno_location(emu, op=None):
     ccname, cconv = getLibcCallConv(emu)
     pfunc, = cconv.getCallArgs(emu, 1)
@@ -1087,7 +1099,6 @@ def Sleep(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     dwMS, = cconv.getCallArgs(emu, 1)
     logger.info("Sleep: dwMillisectonds: %d" % (dwMS))
-    # calling getHeap initializes a heap.  we can cheat for now.  we may need to initialize new heaps here
     time.sleep(dwMS/1000)
     emu.nemu.pause = True
     emu.nemu.nonstop = 0
@@ -3074,6 +3085,7 @@ class Kernel(dict):
         self.environment = kwargs.get('environment', {})
         # File Descriptors
         self.fds = [sys.stdin, sys.stdout, sys.stderr]
+        self.sockets = []
 
         self._syscall_handlers = {}
         self._syscall_handlers.update(kwargs.get('syscall_handlers', {}))
@@ -3872,6 +3884,7 @@ import_map = {
         '*.getopt_long': getopt_long,
         '*.__ctype_get_mb_cur_max': ctype_get_mb_cur_max,
         '*.dcgettext': dcgettext,
+        '*.socket': socket,
         'kernel32.Sleep': Sleep,
         'kernel32.HeapAlloc': HeapAlloc,
         'kernel32.HeapFree': HeapFree,
@@ -4013,8 +4026,8 @@ class NinjaEmulator:
             startva = self.vw.parseExpression(start)
             self.emu.setProgramCounter(startva)
         else:
-            pc = self.emu.getProgramCounter()
-            self.start = self.vw.getSymByAddr(pc)
+            startva = self.emu.getProgramCounter()
+            self.start = self.vw.getSymByAddr(startva)
 
         self.verbose = verbose
         self.XWsnapshot = {}
@@ -5067,6 +5080,7 @@ class NinjaEmulator:
 
     def handleBranch(self, op, skip, skipop):
         '''
+        Handle Branches (and Calls)
         '''
         emu = self.emu
         taint = None

@@ -339,6 +339,10 @@ class DaybreakEmulator:
                         # is endeip in a different module?  If so, set _func_only
                         orig_func_only = self._func_only 
                         tgtva, tgtsz, tgtprm, tgtfn = self.getMemoryMap(endeip)
+
+                        # if lockModule, keep all emulation within this named file
+                        # if notOtherNamed, don't emulate into another named file 
+                        #   (ie. emulation into anonymous modules is fine).
                         if (realself.lockModule and tgtfn != self.startmm[vivisect.MAP_FNAME])\
                                 or (realself.notOtherNamed and tgtfn not in ('', self.startmm[vivisect.MAP_FNAME])):
                             # if we are at the edge of our depth... set _func_only to stop descent.

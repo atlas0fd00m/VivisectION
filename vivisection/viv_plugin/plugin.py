@@ -21,8 +21,9 @@ import envi.threads as e_thread
 
 import vivisect
 
-import vivisection.demangle as ion_demangle
-import vivisection.viv_plugin.share as ion_share
+import vivisection.recon as ionRecon
+import vivisection.demangle as ionDemangle
+import vivisection.viv_plugin.share as ionShare
 
 
 from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog
@@ -36,14 +37,14 @@ from vqt.common import ACT
 def demangleNameAtVa(vw, va):
     '''
     Demangle string at a given address.
-    ion_demangle requires Internet access (Access to demangler.com)
+    ionDemangle requires Internet access (Access to demangler.com)
     '''
     curnm = vw.getName(va)
     if curnm is None:
         vprint(vw, "demangleNameAtVa(0x%x) -> No name found" % va)
         return
 
-    newnm = ion_demangle.demangle(curnm)
+    newnm = ionDemangle.demangle(curnm)
     if newnm != curnm:
         if curnm.endswith("_%.8x" % va) and not newnm.endswith("_%.8x" % va):
             newnm += ("_%.8x" % va)
@@ -129,6 +130,7 @@ def ctxMenuHook(vw, va, expr, menu, parent, nav, tags=None):
         if va == vw.getFunction(va):
             # FIXME: make shared workspace mode work correctly, then uncomment:
             #menu.addAction('SmartEmu', ACT(launchEmuShared, vw, "0x%x"%va))
+            menu.addAction('Function Recon',   ACT(ionRecon.ionRecon, vw, vw.getVivGui(), va))
             menu.addAction('SmartEmu - console', ACT(launchEmuLocal, vw, "0x%x"%va))
             menu.addAction('Reanalyze Function', ACT(reanalyzeFunction, vw, va))
 
@@ -189,7 +191,7 @@ class IonManager:
         # share out the workspace
         # FIXME: check if connected to a VivServer and support that instead
         # FIXME: setting this as the server causes saving to stop working.  need to work around another method of enabling the "Follow/Lead" in the gui.  probably an upstream problem to solve.  for now, we have the console.
-        #self.daemon = ion_share.shareWorkspace(vw)
+        #self.daemon = ionShare.shareWorkspace(vw)
 
     def addSession(self, sessid, sesstup):
         if sessid in self.sessions:

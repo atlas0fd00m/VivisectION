@@ -22,16 +22,32 @@ import envi.threads as e_thread
 import vivisect
 
 import vivisection.recon as ionRecon
+import vivisection.analyze as ionAnal
 import vivisection.demangle as ionDemangle
 import vivisection.viv_plugin.share as ionShare
 
+import vqt.common as vcmn
 
-from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog
+#from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
 from PyQt5 import QtCore
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
 
 from vqt.main import idlethread
 from vqt.basics import VBox
 from vqt.common import ACT
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# uncomment to tell IPython to display ints as hex:
+#import IPython.core as IPc
+#df = IPc.formatters.DisplayFormatter()
+#ptf = df.formatters['text/plain']
+#ptf.for_type(int, lambda n, p, cycle: p.text("0x%x" % n))
+
 
 
 def demangleNameAtVa(vw, va):
@@ -54,35 +70,6 @@ def demangleNameAtVa(vw, va):
     else:
         vprint(vw, "response from demangle.com: %r" % (newnm))
 
-def readMemString(self, va, maxlen=0xfffffff, wide=False):
-    '''
-    Returns a C-style string from memory.  Stops at Memory Map boundaries, or the first NULL (\x00) byte.
-    '''
-
-    terminator = (b'\0', b'\0\0')[wide]
-    for mva, mmaxva, mmap, mbytes in self._map_defs:
-        if mva <= va < mmaxva:
-            mva, msize, mperms, mfname = mmap
-            if not mperms & envi.MM_READ:
-                raise envi.SegmentationViolation(va)
-            offset = va - mva
-
-            # now find the end of the string based on either \x00, maxlen, or end of map
-            end = mbytes.find(terminator, offset)
-
-            left = end - offset
-            if end == -1:
-                # couldn't find the NULL byte
-                mend = offset + maxlen
-                cstr = mbytes[offset:mend]
-            else:
-                # couldn't find the NULL byte go to the end of the map or maxlen
-                mend = offset + (maxlen, left)[left < maxlen]
-                cstr = mbytes[offset:mend]
-            return cstr
-
-    raise envi.SegmentationViolation(va)
-
 def renameFullString(vw, va, maxsz=200):
     '''
     Rename a string to include more of the string (up to maxsz, default=200)
@@ -98,7 +85,7 @@ def renameFullString(vw, va, maxsz=200):
         return
 
     curnm = vw.getName(va)
-    string = readMemString(vw, va, maxsz, bool(ltype==vivisect.LOC_UNI))
+    string = vw.readMemString(va, maxsz, bool(ltype==vivisect.LOC_UNI))
     if curnm is None or not string:
         vprint(vw, "renameFullString(0x%x) -> No string/name found" % va)
         return
@@ -176,6 +163,48 @@ defconfig = {
         'cache': {},
 
         }
+
+def selectFindStringsParms(vw):
+    
+    dynd = vcmn.DynamicDialog('Find Pointers Dialog', parent=vw.getVivGui())
+
+    try:
+        dynd.addIntHexField("minlen", dflt=5, title="Min String Length")
+        dynd.addComboBox("full", ["No", "Yes"], dfltidx=0, title="ALL Memory (ignore other fields)")
+        mmaps = vw.getMemoryMaps()
+        options = [(mmva, "0x%x: %s" % (mmva, mmnm)) for mmva, mmsz, _, mmnm in mmaps]
+        mmaprev = {s:mmva for mmva, s in options}
+
+        dynd.addComboBox("startmap", [mnm for mmva, mnm in options], title="Starting Map")
+        dynd.addComboBox("stopmap", [mnm for mmva, mnm in options], title="Ending Map")
+
+        dynd.addIntHexField('startva', dflt=hex(0), title='Start Address')
+        dynd.addIntHexField('stopva', dflt=hex(0), title='Stop Address ')
+        dynd.addComboBox("apply", ["No", "Yes"], dfltidx=0, title="Apply Strings")
+        dynd.addComboBox("unistrs", ["ASCII", "UTF16LE"], dfltidx=0, title="String Type")
+
+    except Exception as e:
+        logger.warning("ERROR BUILDING DIALOG!", exc_info=1)
+
+    results = dynd.prompt()
+
+    ok =  len(results) != 0
+    if ok:
+        mapstart = mmaprev[results.get('startmap')]
+        mapstop = mmaprev[results.get('stopmap')]
+        stopmap = vw.getMemoryMap(mapstop)
+        mapstopva = stopmap[0] + stopmap[1]
+
+        startva = results.get('startva')
+        stopva = results.get('stopva')
+        minlen = results.get('minlen')
+        full = (results.get('full') == "Yes")
+        apply = (results.get('apply') == "Yes")
+        unistrs = (results.get('unistrs') == "UTF16LE")
+        return ok, (minlen, mapstart, mapstopva, startva, stopva, full, apply, unistrs)
+    return False, None
+
+
 class IonManager:
     def __init__(self, vw, autosave=True):
         self.vw = vw
@@ -215,6 +244,68 @@ class IonManager:
 
     def setUsingConsole(self, state=True):
         self.console_in_use = state
+
+    def findStrings(self, vw):
+        '''
+        ION GUI portions of findStrings
+        TODO:  Add "Dictionary" option which only selects strings that show up in some dictionary
+            probably including only words of size >= 3?
+        '''
+        vwgui = vw.getVivGui()
+        # GUI SETUP
+        ok, data = selectFindStringsParms(vw)
+        if not ok:
+            return
+        
+        minlen, mapstart, mapstop, memstart, memstop, full, apply, unistrs = data
+        
+        if full:
+            memranges = ()
+            print("memranges1: %r" % repr(memranges))
+        elif 0 in (memstart, memstop):
+            memstart = mapstart
+            memstop = mapstop
+            memranges = ((memstart, memstop),)
+            print("memranges2: %r" % repr(memranges))
+        else:
+            memranges = ((memstart, memstop),)
+            print("memranges3: %r" % repr(memranges))
+
+        strvas, ustrvas = ionAnal.findStrings(vw, minlen, memranges=memranges, apply=apply, unistrs=unistrs)
+
+        if apply:
+            print("apply: yes")
+            for strva in strvas:
+                vw.makeString(strva)
+            for ustrva in ustrvas:
+                vw.makeUnicode(ustrva)
+                
+        else:
+            print("not applying")
+            # pop up a window and share the strings there
+            #qpte = QPlainTextEdit()
+
+            # TODO: make this based on VivCli, or Model after VQCli/Console
+            qpte = QTextEdit()
+            title = "Discovered Strings:"
+            qpte.setWindowTitle(title)
+            
+            qpte.insertPlainText("Memory Ranges:\n\t")
+            if memranges:
+                qpte.insertPlainText("\n\t".join(["0x%x:0x%x" % mr for mr in memranges]))
+
+            qpte.insertPlainText("\n\nStrings:\n")
+            strs = ["0x%x: %r" % (va, vw.readMemString(va).decode('utf-8')) for va in strvas]
+            qpte.insertPlainText('\n'.join(strs))
+
+            qpte.insertPlainText("\n\nUnicode:\n")
+            ustrs = ["0x%x: %r" % (va, vw.readMemString(va, wide=True).decode('utf-16le')) for va in ustrvas]
+            qpte.insertPlainText('\n'.join(ustrs))    # probably need to '\n'.join() here instead of ptf
+
+            qpte.move(10,10)
+            qpte.resize(400,200)
+            vwgui.vqDockWidget(qpte)
+        print("DONE")
 
 def getSetupCode(vw, fvaexpr):
     '''
@@ -313,6 +404,7 @@ def vivExtension(vw, vwgui):
     # Add a menu item
     vwgui.vqAddMenuField('&Plugins.&Ion.&PrintDiscoveredStats', vw.printDiscoveredStats, ())
     vwgui.vqAddMenuField('&Plugins.&Ion.&Reset Console In Use', vw._ionmgr.resetConsoleInUse, ())
+    vwgui.vqAddMenuField('&Plugins.&Ion.&Scan for Strings', vw._ionmgr.findStrings, (vw,))
 
     # hook context menu
     vw.addCtxMenuHook('ion', ctxMenuHook)

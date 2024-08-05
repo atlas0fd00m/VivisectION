@@ -1704,7 +1704,7 @@ def CreateFileW(emu, op=None):
     lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile = cconv.getCallArgs(emu, 7)
     kernel = emu.getMeta('kernel')
     # this is the "W" part:
-    filename = readMemString(emu, lpFileName, wide=True)   # TODO: PR for Wide strings into mainline
+    filename = emu.readMemString(lpFileName, wide=True)   # TODO: PR for Wide strings into mainline
 
     result = kernel.CreateFile(filename, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile)
 
@@ -2032,7 +2032,7 @@ def GetModuleHandleW(emu, op=None):
     ccname, cconv = getMSCallConv(emu, op.va)
     lpFilename, = cconv.getCallArgs(emu, 1)
     if lpFilename:
-        filename = readMemString(emu, lpFilename, wide=True)
+        filename = emu.readMemString(lpFilename, wide=True)
         logger.warning("GetModuleHandleW(0x%x)   %r" % (lpFilename, filename))
         print("GetModuleHandleW(0x%x)   %r" % (lpFilename, filename))
         raise Exception("IMPLEMENT ME: GetModuleHandleW(modulename)")
@@ -4913,10 +4913,10 @@ class NinjaEmulator:
                                                 data = emu.readMemString(va)
                                                 print("[%s] == %r" % (expr, data))
                                             elif nsize in ('w', 'W'):
-                                                data = readMemString(emu, va, wide=True)
+                                                data = emu.readMemString(va, wide=True)
                                                 print("[%s] == %r" % (expr, data))
                                             elif nsize in ('u', 'U'):
-                                                data = readMemString(emu, va, wide=True)
+                                                data = emu.readMemString(va, wide=True)
                                                 print("[%s] == %r" % (expr, data.decode('utf-16le')))
                                             else:
                                                 try:
@@ -5251,41 +5251,6 @@ Note: almost anywhere "reg" is written, an expression can be used (not "writing"
     would be returned in hex
 
     """
-
-def readMemString(self, va, maxlen=0xfffffff, wide=False):
-    '''
-    Returns a C-style string from memory.  Stops at Memory Map boundaries, or the first NULL (\x00) byte.
-    '''
-
-    if wide:
-        term = b'\0\0'
-    else:
-        term = b'\0'
-
-    for mva, mmaxva, mmap, mbytes in self._map_defs:
-        if mva <= va < mmaxva:
-            mva, msize, mperms, mfname = mmap
-            if not mperms & MM_READ:
-                raise envi.SegmentationViolation(va)
-            offset = va - mva
-
-            # now find the end of the string based on either \x00, maxlen, or end of map
-            end = mbytes.find(term, offset)
-
-            left = end - offset
-            if end == -1:
-                # couldn't find the NULL byte
-                mend = offset + maxlen
-                cstr = mbytes[offset:mend]
-            else:
-                # couldn't find the NULL byte go to the end of the map or maxlen
-                if wide and (left & 1):
-                    left += 1
-                mend = offset + (maxlen, left)[left < maxlen]
-                cstr = mbytes[offset:mend]
-            return cstr
-
-    raise envi.SegmentationViolation(va)
 
 
 

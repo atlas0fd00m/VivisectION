@@ -166,7 +166,7 @@ defconfig = {
 
 def selectFindStringsParms(vw):
     
-    dynd = vcmn.DynamicDialog('Find Pointers Dialog', parent=vw.getVivGui())
+    dynd = vcmn.DynamicDialog('Find Strings Dialog', parent=vw.getVivGui())
 
     try:
         dynd.addIntHexField("minlen", dflt=5, title="Min String Length")
@@ -202,6 +202,47 @@ def selectFindStringsParms(vw):
         apply = (results.get('apply') == "Yes")
         unistrs = (results.get('unistrs') == "UTF16LE")
         return ok, (minlen, mapstart, mapstopva, startva, stopva, full, apply, unistrs)
+    return False, None
+
+
+def selectFindPointersParms(vw):
+    
+    dynd = vcmn.DynamicDialog('Find Pointers Dialog', parent=vw.getVivGui())
+
+    try:
+        dynd.addComboBox("full", ["No", "Yes"], dfltidx=0, title="ALL Memory (ignore other fields)")
+        mmaps = vw.getMemoryMaps()
+        options = [(mmva, "0x%x: %s" % (mmva, mmnm)) for mmva, mmsz, _, mmnm in mmaps]
+        mmaprev = {s:mmva for mmva, s in options}
+
+        dynd.addComboBox("startmap", [mnm for mmva, mnm in options], title="Starting Map")
+        dynd.addComboBox("stopmap", [mnm for mmva, mnm in options], title="Ending Map")
+
+        dynd.addIntHexField('startva', dflt=hex(0), title='Start Address')
+        dynd.addIntHexField('stopva', dflt=hex(0), title='Stop Address ')
+        dynd.addComboBox("apply", ["Yes", "No"], dfltidx=1, title="Apply Pointers to Workspace")
+        dynd.addComboBox("follow", ["Yes", "No"], dfltidx=0, title="Follow Pointers (analysis)")
+        dynd.addComboBox("lclfile", ["Yes", "No"], dfltidx=0, title="Only include Pointers to local file")
+
+    except Exception as e:
+        logger.warning("ERROR BUILDING DIALOG!", exc_info=1)
+
+    results = dynd.prompt()
+
+    ok =  len(results) != 0
+    if ok:
+        mapstart = mmaprev[results.get('startmap')]
+        mapstop = mmaprev[results.get('stopmap')]
+        stopmap = vw.getMemoryMap(mapstop)
+        mapstopva = stopmap[0] + stopmap[1]
+
+        startva = results.get('startva')
+        stopva = results.get('stopva')
+        full = (results.get('full') == "Yes")
+        apply = (results.get('apply') == "Yes")
+        follow = (results.get('follow') == "Yes")
+        lclfile = (results.get('lclfile') == "Yes")
+        return ok, (mapstart, mapstopva, startva, stopva, full, apply, follow, lclfile)
     return False, None
 
 
@@ -271,7 +312,7 @@ class IonManager:
             memranges = ((memstart, memstop),)
             print("memranges3: %r" % repr(memranges))
 
-        strvas, ustrvas = ionAnal.findStrings(vw, minlen, memranges=memranges, apply=apply, unistrs=unistrs)
+        strvas, ustrvas = ionAnal.findStrings(vw, minlen, memranges=memranges, unistrs=unistrs)
 
         if apply:
             print("apply: yes")
@@ -297,10 +338,77 @@ class IonManager:
             qpte.insertPlainText("\n\nStrings:\n")
             strs = ["0x%x: %r" % (va, vw.readMemString(va).decode('utf-8')) for va in strvas]
             qpte.insertPlainText('\n'.join(strs))
+            qpte.insertPlainText("\n\nTotal(str): %d" % len(strs))
 
             qpte.insertPlainText("\n\nUnicode:\n")
             ustrs = ["0x%x: %r" % (va, vw.readMemString(va, wide=True).decode('utf-16le')) for va in ustrvas]
             qpte.insertPlainText('\n'.join(ustrs))    # probably need to '\n'.join() here instead of ptf
+            qpte.insertPlainText("\n\nTotal(unicode): %d" % len(ustrs))
+
+            qpte.move(10,10)
+            qpte.resize(400,200)
+            vwgui.vqDockWidget(qpte)
+        print("DONE")
+
+    def findPointers(self, vw):
+        '''
+        ION GUI portions of findPointers
+        '''
+        vwgui = vw.getVivGui()
+        # GUI SETUP
+        ok, data = selectFindPointersParms(vw)
+        if not ok:
+            return
+        
+        mapstart, mapstop, memstart, memstop, full, apply, follow, lclfile = data
+        
+        if full:
+            memranges = ()
+            print("memranges1: %r" % repr(memranges))
+        elif 0 in (memstart, memstop):
+            memstart = mapstart
+            memstop = mapstop
+            memranges = ((memstart, memstop),)
+            print("memranges2: %r" % repr(memranges))
+        else:
+            memranges = ((memstart, memstop),)
+            print("memranges3: %r" % repr(memranges))
+
+        pointers = ionAnal.findPointers(vw, memranges=memranges, lclfile=lclfile)
+
+        if apply:
+            print("apply: yes")
+            for ptr in pointers:
+                vw.makePointer(ptr, follow=follow)
+                
+        else:
+            print("not applying")
+            # pop up a window and share the strings there
+            #qpte = QPlainTextEdit()
+
+            # TODO: make this based on VivCli, or Model after VQCli/Console
+            qpte = QTextEdit()
+            title = "Discovered Pointers:"
+            qpte.setWindowTitle(title)
+            
+            qpte.insertPlainText("Memory Ranges:\n\t")
+            if memranges:
+                qpte.insertPlainText("\n\t".join(["0x%x:0x%x" % mr for mr in memranges]))
+
+            qpte.insertPlainText("\n\nPointers:\n")
+            ptrs = []
+
+            for va in pointers:
+                ptr = vw.readMemoryPtr(va)
+                ptrname = vw.getName(ptr)
+                if ptrname:
+                    ptrs.append("0x%x: 0x%x (%r)" % (va, ptr, ptrname))
+
+                else:
+                    ptrs.append("0x%x: 0x%x" % (va, ptr))
+
+            qpte.insertPlainText('\n'.join(ptrs))
+            qpte.insertPlainText("\n\nTotal: %d" % len(ptrs))
 
             qpte.move(10,10)
             qpte.resize(400,200)
@@ -405,6 +513,7 @@ def vivExtension(vw, vwgui):
     vwgui.vqAddMenuField('&Plugins.&Ion.&PrintDiscoveredStats', vw.printDiscoveredStats, ())
     vwgui.vqAddMenuField('&Plugins.&Ion.&Reset Console In Use', vw._ionmgr.resetConsoleInUse, ())
     vwgui.vqAddMenuField('&Plugins.&Ion.&Scan for Strings', vw._ionmgr.findStrings, (vw,))
+    vwgui.vqAddMenuField('&Plugins.&Ion.&Scan for Pointers', vw._ionmgr.findPointers, (vw,))
 
     # hook context menu
     vw.addCtxMenuHook('ion', ctxMenuHook)

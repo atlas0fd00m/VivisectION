@@ -245,6 +245,44 @@ def selectFindPointersParms(vw):
         return ok, (mapstart, mapstopva, startva, stopva, full, apply, follow, lclfile)
     return False, None
 
+def selectFindStackRetsParms(vw):
+    
+    dynd = vcmn.DynamicDialog('Find Pointers Dialog', parent=vw.getVivGui())
+
+    try:
+        dynd.addComboBox("full", ["No", "Yes"], dfltidx=0, title="ALL Memory (ignore other fields)")
+        mmaps = vw.getMemoryMaps()
+        options = [(mmva, "0x%x: %s" % (mmva, mmnm)) for mmva, mmsz, _, mmnm in mmaps]
+        mmaprev = {s:mmva for mmva, s in options}
+
+        dynd.addComboBox("startmap", [mnm for mmva, mnm in options], title="Starting Map")
+        dynd.addComboBox("stopmap", [mnm for mmva, mnm in options], title="Ending Map")
+
+        dynd.addIntHexField('startva', dflt=hex(0), title='Start Address')
+        dynd.addIntHexField('stopva', dflt=hex(0), title='Stop Address ')
+        dynd.addComboBox("apply", ["Yes", "No"], dfltidx=1, title="Apply Pointers to Workspace")
+        dynd.addComboBox("follow", ["Yes", "No"], dfltidx=0, title="Follow Pointers (analysis)")
+
+    except Exception as e:
+        logger.warning("ERROR BUILDING DIALOG!", exc_info=1)
+
+    results = dynd.prompt()
+
+    ok =  len(results) != 0
+    if ok:
+        mapstart = mmaprev[results.get('startmap')]
+        mapstop = mmaprev[results.get('stopmap')]
+        stopmap = vw.getMemoryMap(mapstop)
+        mapstopva = stopmap[0] + stopmap[1]
+
+        startva = results.get('startva')
+        stopva = results.get('stopva')
+        full = (results.get('full') == "Yes")
+        apply = (results.get('apply') == "Yes")
+        follow = (results.get('follow') == "Yes")
+        return ok, (mapstart, mapstopva, startva, stopva, full, apply, follow)
+    return False, None
+
 
 class IonManager:
     def __init__(self, vw, autosave=True):
@@ -415,6 +453,62 @@ class IonManager:
             vwgui.vqDockWidget(qpte)
         print("DONE")
 
+    def findStackRets(self, vw):
+        '''
+        ION GUI portions of findStackRets
+        Search through a memory map or memory range for return pointsre
+        '''
+        vwgui = vw.getVivGui()
+        # GUI SETUP
+        ok, data = selectFindStackRetsParms(vw)
+        if not ok:
+            return
+        
+        mapstart, mapstop, memstart, memstop, full, apply, follow = data
+        
+        if full:
+            memranges = ()
+            print("memranges1: %r" % repr(memranges))
+        elif 0 in (memstart, memstop):
+            memstart = mapstart
+            memstop = mapstop
+            memranges = ((memstart, memstop),)
+            print("memranges2: %r" % repr(memranges))
+        else:
+            memranges = ((memstart, memstop),)
+            print("memranges3: %r" % repr(memranges))
+
+        retvas = ionAnal.findStackRets(vw, memranges=memranges)
+
+        if apply:
+            print("apply: yes")
+            for stackva, retva, op in retvas:
+                vw.makeCode(retva)
+                
+        else:
+            print("not applying")
+            # pop up a window and share the strings there
+            #qpte = QPlainTextEdit()
+
+            # TODO: make this based on VivCli, or Model after VQCli/Console
+            qpte = QTextEdit()
+            title = "Discovered Rets:"
+            qpte.setWindowTitle(title)
+            
+            qpte.insertPlainText("Memory Ranges:\n\t")
+            if memranges:
+                qpte.insertPlainText("\n\t".join(["0x%x:0x%x" % mr for mr in memranges]))
+
+            qpte.insertPlainText("\n\nRet Pointer:\n")
+            rets = ["0x%x: 0x%x" % (stackva, retva) for stackva, retva, op in retvas]
+            qpte.insertPlainText('\n'.join(rets))
+            qpte.insertPlainText("\n\nTotal(str): %d" % len(rets))
+
+            qpte.move(10,10)
+            qpte.resize(400,200)
+            vwgui.vqDockWidget(qpte)
+        print("DONE")
+
 def getSetupCode(vw, fvaexpr):
     '''
     Caches results in Ion config
@@ -512,8 +606,9 @@ def vivExtension(vw, vwgui):
     # Add a menu item
     vwgui.vqAddMenuField('&Plugins.&Ion.&PrintDiscoveredStats', vw.printDiscoveredStats, ())
     vwgui.vqAddMenuField('&Plugins.&Ion.&Reset Console In Use', vw._ionmgr.resetConsoleInUse, ())
-    vwgui.vqAddMenuField('&Plugins.&Ion.&Scan for Strings', vw._ionmgr.findStrings, (vw,))
-    vwgui.vqAddMenuField('&Plugins.&Ion.&Scan for Pointers', vw._ionmgr.findPointers, (vw,))
+    vwgui.vqAddMenuField('&Plugins.&Ion.Scan for &Strings', vw._ionmgr.findStrings, (vw,))
+    vwgui.vqAddMenuField('&Plugins.&Ion.Scan for &Pointers', vw._ionmgr.findPointers, (vw,))
+    vwgui.vqAddMenuField('&Plugins.&Ion.S&tack.Scan for &Return Pointers', vw._ionmgr.findStackRets, (vw,))
 
     # hook context menu
     vw.addCtxMenuHook('ion', ctxMenuHook)

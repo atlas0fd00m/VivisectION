@@ -47,9 +47,9 @@ The following tools will manage a symlink to the plugin directory into $HOME/.vi
 
 ## Features:
 * Ion Toolbar in Vivisect
-* Function Emulation (console) - Right click on the using the console (how you started Vivisect)
+* Function Emulation (console) - Right click on a function address and choose "SmartEmu-Console" to emulate using the console (how you started Vivisect)
+* Function Recon - Right click on a function and choose FuncRecon to emulate through all instructions and return interesting bits
 * CLI - by clicking the button, users get an interactive python shell in the console (cli you started Vivisect from)
-
 
 ## Future:
 * It will also glue debuggers together with Vivisect Server/Shared Workspace
@@ -58,7 +58,7 @@ The following tools will manage a symlink to the plugin directory into $HOME/.vi
     * Import VSNAP, convert to Emu
     * Import GDB Core file, convert to Emu
 
-* Other goodies as I decide to release them (probably expect FuncRecon shortly)
+* Other goodies as I decide to release them (C++ helpers, anyone?)
 
 ## Getting Started
 

@@ -247,7 +247,7 @@ def selectFindPointersParms(vw):
 
 def selectFindStackRetsParms(vw):
     
-    dynd = vcmn.DynamicDialog('Find Pointers Dialog', parent=vw.getVivGui())
+    dynd = vcmn.DynamicDialog('Find Return Pointers Dialog', parent=vw.getVivGui())
 
     try:
         dynd.addComboBox("full", ["No", "Yes"], dfltidx=0, title="ALL Memory (ignore other fields)")
@@ -257,11 +257,12 @@ def selectFindStackRetsParms(vw):
 
         dynd.addComboBox("startmap", [mnm for mmva, mnm in options], title="Starting Map")
         dynd.addComboBox("stopmap", [mnm for mmva, mnm in options], title="Ending Map")
-
         dynd.addIntHexField('startva', dflt=hex(0), title='Start Address')
         dynd.addIntHexField('stopva', dflt=hex(0), title='Stop Address ')
         dynd.addComboBox("apply", ["Yes", "No"], dfltidx=1, title="Apply Pointers to Workspace")
-        dynd.addComboBox("follow", ["Yes", "No"], dfltidx=0, title="Follow Pointers (analysis)")
+
+        dynd.addComboBox("tgtstartmap", [mnm for mmva, mnm in options], title="Starting Map (target)")
+        dynd.addComboBox("tgtstopmap", [mnm for mmva, mnm in options], title="Ending Map (target)")
 
     except Exception as e:
         logger.warning("ERROR BUILDING DIALOG!", exc_info=1)
@@ -279,8 +280,11 @@ def selectFindStackRetsParms(vw):
         stopva = results.get('stopva')
         full = (results.get('full') == "Yes")
         apply = (results.get('apply') == "Yes")
-        follow = (results.get('follow') == "Yes")
-        return ok, (mapstart, mapstopva, startva, stopva, full, apply, follow)
+        tgtstart = mmaprev[results.get('tgtstartmap')]
+        tgtstop = mmaprev[results.get('tgtstopmap')]
+        tgtstopmap = vw.getMemoryMap(tgtstop)
+        tgtstopva = tgtstopmap[0] + tgtstopmap[1]
+        return ok, (mapstart, mapstopva, startva, stopva, full, tgtstart, tgtstopva, apply)
     return False, None
 
 
@@ -464,29 +468,33 @@ class IonManager:
         if not ok:
             return
         
-        mapstart, mapstop, memstart, memstop, full, apply, follow = data
+        mapstart, mapstop, memstart, memstop, full, tgtstart, tgtstopva, apply = data
         
         if full:
             memranges = ()
-            print("memranges1: %r" % repr(memranges))
+            logger.debug("memranges1: %r", memranges)
         elif 0 in (memstart, memstop):
             memstart = mapstart
             memstop = mapstop
             memranges = ((memstart, memstop),)
-            print("memranges2: %r" % repr(memranges))
+            logger.debug("memranges2: %r", memranges)
         else:
             memranges = ((memstart, memstop),)
-            print("memranges3: %r" % repr(memranges))
+            logger.debug("memranges3: %r", memranges)
 
-        retvas = ionAnal.findStackRets(vw, memranges=memranges)
+
+        tgtranges = ((tgtstart, tgtstopva),)
+        logger.debug("tgtranges: %r", tgtranges)
+
+        retvas = ionAnal.findStackRets(vw, memranges=memranges, tgtranges=tgtranges)
 
         if apply:
-            print("apply: yes")
+            logger.debug("apply: yes")
             for stackva, retva, op in retvas:
                 vw.makeCode(retva)
                 
         else:
-            print("not applying")
+            logger.debug("not applying")
             # pop up a window and share the strings there
             #qpte = QPlainTextEdit()
 
@@ -502,12 +510,12 @@ class IonManager:
             qpte.insertPlainText("\n\nRet Pointer:\n")
             rets = ["0x%x: 0x%x" % (stackva, retva) for stackva, retva, op in retvas]
             qpte.insertPlainText('\n'.join(rets))
-            qpte.insertPlainText("\n\nTotal(str): %d" % len(rets))
+            qpte.insertPlainText("\n\nTotal(rets): %d" % len(rets))
 
             qpte.move(10,10)
             qpte.resize(400,200)
             vwgui.vqDockWidget(qpte)
-        print("DONE")
+        logger.debug("DONE")
 
 def getSetupCode(vw, fvaexpr):
     '''

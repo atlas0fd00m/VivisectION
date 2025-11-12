@@ -17,7 +17,7 @@ for s in os.listdir('scripts'):
         scripts.append('scripts/%s'%s)
 
 
-setup  (name        = 'VivisectION',
+setup  (name        = 'vivisection',
         version     = VERSION,
         description = desc,
         long_description=desc,

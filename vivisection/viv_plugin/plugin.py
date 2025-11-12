@@ -121,6 +121,8 @@ def ctxMenuHook(vw, va, expr, menu, parent, nav, tags=None):
             menu.addAction('SmartEmu - console', ACT(launchEmuLocal, vw, "0x%x"%va))
             menu.addAction('Reanalyze Function', ACT(reanalyzeFunction, vw, va))
 
+        menu.addAction('Mass Undefine', ACT(vw._ionmgr.massUndef, vw, va))
+
         if vw.getName(va):
             # if it has a name, let's offer the option of demangling
             menu.addAction('Demangle Name', ACT(demangleNameAtVa, vw, va))
@@ -204,6 +206,35 @@ def selectFindStringsParms(vw):
         return ok, (minlen, mapstart, mapstopva, startva, stopva, full, apply, unistrs)
     return False, None
 
+
+def selectUndefineParms(vw, vastart=None, vaend=None):
+    vwgui = vw.getVivGui()
+    
+    dynd = vcmn.DynamicDialog('Mass Undefine Dialog', parent=vw.getVivGui())
+
+    if vastart is None:
+        vastart = 0
+
+    if vaend is None:
+        vaend = vastart
+
+    try:
+        dynd.addIntHexField('startva', dflt=hex(vastart), title='Start Address')
+        dynd.addIntHexField('stopva', dflt=hex(vaend), title='Stop Address ')
+        dynd.addComboBox("apply", ["Yes", "No"], dfltidx=1, title="Apply Changes to Workspace")
+
+    except Exception as e:
+        logger.warning("ERROR BUILDING DIALOG!", exc_info=1)
+
+    results = dynd.prompt()
+
+    ok =  len(results) != 0
+    if ok:
+        startva = results.get('startva')
+        stopva = results.get('stopva')
+        apply = (results.get('apply') == "Yes")
+        return ok, (startva, stopva, apply)
+    return False, None
 
 def selectFindPointersParms(vw):
     
@@ -517,6 +548,65 @@ class IonManager:
             vwgui.vqDockWidget(qpte)
         logger.debug("DONE")
 
+    def massUndef(self, vw, va=None):
+        '''
+        ION GUI portions of findStackRets
+        Search through a memory map or memory range for return pointsre
+        '''
+        vwgui = vw.getVivGui()
+        # GUI SETUP
+        ok, data = selectUndefineParms(vw, va)
+        if not ok:
+            return
+        
+        memstart, memstop, apply = data
+        memranges = ((memstart, memstop),)
+        
+        locs = []
+        va = memstop
+        if apply:
+            logger.debug("apply: yes")
+        while va >= memstart:
+            loctup = vw.getLocation(va-1)
+            if loctup is None:
+                va -= 1
+                sys.stderr.write('/')
+                continue
+
+            logger.warning('0x%x', loctup[0])
+            va, _, _, _ = loctup
+            locs.append(loctup)
+            if apply:
+                try:
+                    vw.delLocation(va)
+                except Exception as e:
+                    logger.warning("Error while Undefining Location (0x%x)", va, exc_info=1)
+
+            sys.stderr.write('.')
+
+        if not apply:
+            logger.debug("not applying")
+            # pop up a window and share the strings there
+            qpte = QTextEdit()
+            title = "Discovered Locations (to be undefined):"
+            qpte.setWindowTitle(title)
+            
+            if memranges:
+                qpte.insertPlainText("Memory Ranges:\n\t")
+                qpte.insertPlainText("\n\t".join(["0x%x:0x%x" % mr for mr in memranges]))
+
+            qpte.insertPlainText("\n\nLocations (not deleted):\n")
+            locrepr = ["0x%x: %r" % (loctup[0], vw.reprLocation(loctup)) for loctup in locs]
+            qpte.insertPlainText('\n'.join(locrepr))
+            qpte.insertPlainText("\n\nTotal(locations): %d" % len(locs))
+
+            qpte.move(10,10)
+            qpte.resize(400,200)
+            vwgui.vqDockWidget(qpte)
+        logger.debug("DONE")
+
+        
+
 def getSetupCode(vw, fvaexpr):
     '''
     Caches results in Ion config
@@ -617,6 +707,7 @@ def vivExtension(vw, vwgui):
     vwgui.vqAddMenuField('&Plugins.&Ion.Scan for &Strings', vw._ionmgr.findStrings, (vw,))
     vwgui.vqAddMenuField('&Plugins.&Ion.Scan for &Pointers', vw._ionmgr.findPointers, (vw,))
     vwgui.vqAddMenuField('&Plugins.&Ion.S&tack.Scan for &Return Pointers', vw._ionmgr.findStackRets, (vw,))
+    vwgui.vqAddMenuField('&Plugins.&Ion.S&tack.Mass Undefine', vw._ionmgr.massUndef, (vw,))
 
     # hook context menu
     vw.addCtxMenuHook('ion', ctxMenuHook)

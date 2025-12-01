@@ -1,0 +1,46 @@
+[build-system]
+requires = ['setuptools>=68.0.0', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'vivisection'
+version = '1.1.0'
+authors = [
+    { name =  'atlas of d00m', email = 'atlas@r4780y.com'}
+]
+description = 'Cross-section of GUI Reversing, Emulation and Debugging, with an emphasis on using Emulation and other powerful Vivisect toys to aid in Reverse Engineering and Vulnerability Research.'
+readme = 'README.md'
+requires-python = '>=3.8'
+license = 'Apache-2.0'
+classifiers = [
+    'Topic :: Security',
+    'Topic :: Software Development :: Disassemblers',
+    'Topic :: Software Development :: Debuggers',
+    'Programming Language :: Python :: 3.8',
+]
+
+dependencies = [
+    'vivisect>=1.0.8',
+    'requests',
+    'ipython',
+]
+
+[project.urls]
+Homepage = 'https://vivisection.readthedocs.io/en/latest/'
+Documentation = 'https://vivisection.readthedocs.io/en/latest/'
+Repository = 'https://github.com/atlas0fd00m/vivisection'
+Changelog = 'https://vivisection.readthedocs.io/en/latest/vivisect/changelog.html'
+
+[project.scripts]
+vivisection_activate = 'vivisection.scripts.vivisection_activate:doActivation'
+vivisection_deactivate = 'vivisection.scripts.vivisection_deactivate:doDeactivation'
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+'*' = ['*.dll', '*.dylib', '*.lyt', 'Makefile', '*.c', '*.h', '*.yes', '*.sh']
+
+[tool.setuptools.packages.find]
+include = ['vivisection']
+

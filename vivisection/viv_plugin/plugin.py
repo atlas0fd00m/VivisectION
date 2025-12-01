@@ -21,17 +21,23 @@ import envi.threads as e_thread
 
 import vivisect
 
-import vivisection.recon as ionRecon
+try:
+    import vivisection.recon as ionRecon
+    import vqt.common as vcmn
+except Exception as e:
+    print("cannot load vq_views or e_q_memory: %r" % e)
 import vivisection.analyze as ionAnal
 import vivisection.demangle as ionDemangle
 import vivisection.viv_plugin.share as ionShare
 
-import vqt.common as vcmn
 
-#from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
-from PyQt5 import QtCore
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
+try:
+    #from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
+    from PyQt5 import QtCore
+    from PyQt5.QtGui import *
+    from PyQt5.QtWidgets import *
+except Exception as e:
+    print("not loading PyQt5: %r" % e)
 
 from vqt.main import idlethread
 from vqt.basics import VBox

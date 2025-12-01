@@ -5,7 +5,7 @@ import envi.config as e_config
 
 from vivisection import viv_plugin
 
-def doActivation(args):
+def doActivation(args=[]):
     '''
     Activation
     If you provide 
@@ -36,6 +36,7 @@ def doActivation(args):
         sys.exit(-1)
 
     os.symlink(viv_plugin.__path__[0], vivisection_plugin)
+    print("VivisectION Activated")
 
 if __name__ == '__main__':
     doActivation(sys.argv[1:])

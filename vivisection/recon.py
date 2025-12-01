@@ -3,22 +3,22 @@ try to emulate starting from the current function and grab all strings reference
 '''
 import itertools
 
-import vqt.saveable as vq_save
-import vivisect.qt.views as vq_views
-import envi.qt.memory as e_q_memory
-
 import IPython.core as IPc
 df = IPc.formatters.DisplayFormatter()
 ptf = df.formatters['text/plain']
 ptf.for_type(int, lambda n, p, cycle: p.text("0x%x" % n))
 
-
 from vivisection.emulation import *
 
 # TODO: add Dynamic Branches
 
+import vqt.saveable as vq_save
+import vivisect.qt.views as vq_views
+import envi.qt.memory as e_q_memory
+
 from PyQt5.QtWidgets import QPlainTextEdit, QWidget, QLabel, QLineEdit
 from vqt.basics import HBox, VBox
+
 
 def ionRecon(vw, vwgui, fva, graphonly=False, textout=False):
     emu, emumon = getFuncRecon(vw, fva)

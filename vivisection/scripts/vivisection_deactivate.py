@@ -5,7 +5,7 @@ import envi.config as e_config
 
 from vivisection import viv_plugin
 
-def doDeactivation(args):
+def doDeactivation(args=[]):
     '''
     Deactivation
     '''
@@ -32,6 +32,8 @@ def doDeactivation(args):
             print("Removing plugin from: '%s'" % vivisection_plugin)
 
             os.remove(vivisection_plugin)
+
+    print("VivisectION Deactivated")
 
 if __name__ == '__main__':
     doDeactivation(sys.argv[1:])

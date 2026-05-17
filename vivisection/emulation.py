@@ -95,8 +95,12 @@ class DaybreakMonitor(viv_monitor.AnalysisMonitor):
             return True
 
     def addString(self, va, val):
-        string = self.vw.readMemString(val)
-        string = string.decode('utf-8')
+        try:
+            string = self.vw.readMemString(val)
+            string = string.decode('utf-8')
+        except (UnicodeDecodeError, AttributeError):
+            logger.warning("Failed to decode UTF-8 string at 0x%x", val)
+            return False
         item = (va, val, string)
         print("Adding String: 0x%x->0x%x (%r)" % item)
         if item not in self.strings:
@@ -111,8 +115,12 @@ class DaybreakMonitor(viv_monitor.AnalysisMonitor):
         return False
 
     def addUnicode(self, va, val):
-        string = self.vw.readMemString(val, wide=True)
-        string = string.decode('utf-16le')
+        try:
+            string = self.vw.readMemString(val, wide=True)
+            string = string.decode('utf-16le')
+        except (UnicodeDecodeError, AttributeError):
+            logger.warning("Failed to decode UTF-16 string at 0x%x", val)
+            return False
         item = (va, val, string)
         print("Adding Unicode: 0x%x->0x%x (%r)" % item)
         if item not in self.strings:

@@ -1,4 +1,12 @@
+import os
+
 import requests
+
+# Default demangling endpoint.  The plain-HTTP URL redirects to HTTPS
+# and the redirect drops the POST body, so use the HTTPS URL directly.
+# Override with VIVISECTION_DEMANGLE_URL for a local mirror or air-gapped env.
+DEMANGLE_URL = os.environ.get('VIVISECTION_DEMANGLE_URL', 'https://www.demangler.com/raw')
+
 
 class DemangleException(Exception):
     def __init__(self, resp):
@@ -18,7 +26,7 @@ def demangle(mangname):
             return mangname
 
     hdr = {'Content-Type': 'application/x-www-form-urlencoded'}
-    resp = requests.post('http://demangler.com/raw', data='input=%s'%mangname, headers=hdr)
+    resp = requests.post(DEMANGLE_URL, data='input=%s'%mangname, headers=hdr)
 
     if resp.status_code != 200:
         raise DemangleException(resp)

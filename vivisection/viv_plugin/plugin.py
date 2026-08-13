@@ -33,12 +33,21 @@ import vivisection.viv_plugin.share as ionShare
 
 
 try:
-    #from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
-    from PyQt5 import QtCore
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    from vivisection.qt._qt_compat import (
+        QtCore, QtGui, QtWidgets, QApplication, 
+        QToolBar, QLabel, QPushButton, QTextEdit, QWidget,
+        QInputDialog, QPlainTextEdit, QAction, pyqtSignal,
+        apply_qt_exec_compat, QtWebEngine as _QWE
+    )  # noqa: F401
+    
+    if _QWE is not None:
+        from vivisection.qt._qt_compat import PyQt5_available, PyQt6_available
+        QWebEngine = _QWE
+        
+    print("vPlugin loaded with Qt binding")
 except Exception as e:
-    print("not loading PyQt5: %r" % e)
+    print("not loading vQt plugins: %r" % e)
+
 
 from vqt.main import idlethread
 from vqt.basics import VBox

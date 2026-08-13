@@ -18,12 +18,21 @@ classifiers = [
     'Topic :: Software Development :: Debuggers',
     'Programming Language :: Python :: 3.8',
 ]
-
 dependencies = [
     'vivisect>=1.0.8',
     'requests',
     'ipython',
     'psutil',
+]
+
+[project.optional-dependencies.gui]
+description = "PyQt5 or PyQt6 support (pick either one)"
+dependencies = [
+    'PyQt5>=5.12; python_version <= 3.11',
+    'PyQt6>=6.4; python_version ~= 3.9',
+]
+
+
 ]
 
 [project.urls]

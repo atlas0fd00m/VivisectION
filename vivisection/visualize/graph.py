@@ -21,9 +21,15 @@ import vivisect.qt.memory as vq_memory
 import vivisect.qt.ctxmenu as vq_ctxmenu
 import vivisect.tools.graphutil as viv_graphutil
 
-from PyQt5 import Qt, QtCore, QtGui, QtWebEngine, QtWidgets
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import *
+# Compat shim handles PyQt5 vs PyQt6 detection and normalization.
+from vivisection.qt._qt_compat import (
+    QtCore, QtGui, Qt, pyqtSignal, QtWidgets, QApplication, QWebEngine, apply_qt_exec_compat
+)  # noqa: F401
+
+apply_qt_exec_compat()
+
+
+
 
 from envi.threads import firethread
 from vqt.main import idlethread, eatevents, workthread, vqtevent

@@ -32,7 +32,6 @@ dependencies = [
 ]
 
 
-]
 
 [project.urls]
 Homepage = 'https://vivisection.readthedocs.io/en/latest/'

@@ -1,209 +1,214 @@
-"""PyQt5/PyQt6 dual-version compatibility shim for VivisectION."""
+"""PyQt5/PyQt6 dual-version compatibility shim for VivisectION.
+
+Provides a single import point that works regardless of whether the user has
+installed PyQt5 or PyQt6.  The two bindings share most APIs but differ in a
+few important places, which this module normalizes:
+
+* Qt5 exposes a top-level ``PyQt5.Qt`` module holding the ``Qt`` enum;
+  Qt6 does not (enums live in ``QtCore``).  We re-export ``Qt`` as a
+  lazy, int-valued namespace that works for both.
+* Qt5 uses the legacy ``exec_()`` name for menu/dialog loops; Qt6 renamed
+  to ``exec()``.  We patch classes so both names work.
+"""
 import sys as _sys
 
 
+# ---------------------------------------------------------------------------
+# Binding detection (PyQt6 preferred, PyQt5 fallback)
+# ---------------------------------------------------------------------------
 _pyqt_ver = None
 try:
-    import PyQt5  # noqa: F401
-    _pyqt_ver = '5'
+    import PyQt6  # noqa: F401
+    _pyqt_ver = '6'
 except ImportError:
     pass
 
 if _pyqt_ver is None:
     try:
-        from PyQt6.QtCore import Qt as _qs
-        _pyqt_ver = '6'
+        import PyQt5  # noqa: F401
+        _pyqt_ver = '5'
     except ImportError:
         raise RuntimeError(
             "No Qt binding available.\n"
-            "Install one: pip install PyQt5  OR  pip install PyQt6\n")
+            "Install one: pip install PyQt6  OR  pip install PyQt5\n")
 
-# Core modules (same names regardless of version)
+# Version flags used by other modules for explicit branching.
+PyQt5_available = _pyqt_ver == '5'
+PyQt6_available = _pyqt_ver == '6'
+
+# Core modules (same names regardless of version).
 _CORE_MOD = 'PyQt6.QtCore' if _pyqt_ver == '6' else 'PyQt5.QtCore'
 _GUI_MOD = 'PyQt6.QtGui' if _pyqt_ver == '6' else 'PyQt5.QtGui'
-_WID = 'PyQt6.QtWidgets' if _pyqt_ver == '6' else 'PyQt5.QtWidgets'
+_WID_MOD = 'PyQt6.QtWidgets' if _pyqt_ver == '6' else 'PyQt5.QtWidgets'
 
-QtCore = _sys.modules.get(_CORE_MOD) or __import__(_CORE_MOD)  # type: ignore[arg-type]
-QtGui = _sys.modules.get(_GUI_MOD) or __import__(_GUI_MOD)     # type: ignore[arg-type]
+QTCORE = __import__(_CORE_MOD, fromlist=['*'])
+QTGUI = __import__(_GUI_MOD, fromlist=['*'])
+QTWIDGETS = __import__(_WID_MOD, fromlist=['*'])
 
-# pyqtSignal (identical API in both versions)
-if _pyqt_ver == '5':
-    from PyQt5.QtCore import pyqtSignal
-else:
-    from PyQt6.QtCore import pyqtSignal
+# Public module aliases.
+QtCore = QTCORE
+QtGui = QTGUI
+QtWidgets = QTWIDGETS
 
-
-# Qt enum namespace wrapper (replaces old ``from PyQt5 import Qt``)
-_QT_CACHE = {}  # type: ignore[var-annotated]
-
-
-class _QFlagMeta(type):
-    """Metaclass for int-like Qt flag objects."""
-
-    def __init__(mcs, name, bases, attrs):  # pylint: disable=W0613  # noqa: RUF021
-        super().__init__(name, bases, attrs)
+# pyqtSignal (identical API in both versions).
+pyqtSignal = QTCORE.pyqtSignal
 
 
-class _QFlag(int):
-    """Int-based wrapper that compares identically to the underlying enum value."""
+# ---------------------------------------------------------------------------
+# Qt enum namespace wrapper (replaces the old ``from PyQt5 import Qt``)
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Qt enum namespace wrapper (replaces the old ``from PyQt5 import Qt``)
+# ---------------------------------------------------------------------------
+class QtEnumNamespace:
+    """Attribute-style ``Qt.Key_*`` / ``Qt.QEvent.*`` access that works for
+    both PyQt5 and PyQt6.
 
-    def __new__(cls, val, name):  # type: ignore[misc]
-        return int.__new__(cls, int(val))
-
-    def __init__(self, val, name):  # type: ignore[misc]
-        self._qname = name  # noqa: RUF012
-
-    def __eq__(self, o):  # type: ignore[misc] [attr-defined]
-        if isinstance(o, _QFlag):
-            return int(self) == int(o)
-        return int(self) == o  # type: ignore[comparison-overlap]
-
-    def __hash__(self):  # type: ignore[misc]
-        return int(self)  # type: ignore[return-value]
-
-    def __repr__(self):  # type: ignore[misc]
-        tag = self._qname or str(int(self))
-        return "Qt." + tag
-
-
-class QtEnumNamespace:  # noqa: F401
-    """Attribute-style ``Qt.Key_Xxx`` access for both PyQt5 and PyQt6.
-
-    Replaces the old ``from PyQt5 import Qt`` idiom used in VivisectION.
-    Values are transparently compared by int-value so ``if x == Qt.Key_Escape`` still works.
+    PyQt5 exposes enum members *directly* on the ``Qt`` class (e.g.
+    ``Qt.Key_Escape``).  PyQt6 nests members under enum types
+    (``Qt.Key.Key_Escape``, ``Qt.QEvent.Type.ChildAdded``).  This namespace
+    flattens those differences: for PyQt6 it resolves nested enum members for
+    the requested name directly (so ``Qt.Xxx`` yields the right value), and
+    it maps ``Qt.QEvent`` to an object that also exposes the ``ChildAdded`` /
+    ``Wheel`` etc. *type* members via ``.Type`` so legacy call sites work.
     """
 
-    def __getattr__(self, name: str) -> _QFlag:  # type: ignore[misc]
+    def __getattr__(self, name):
         if name.startswith('__'):
             raise AttributeError(name)
 
-        if not _QT_CACHE:
-            for n in dir(QtCore):
-                val = getattr(QtCore, n)  # noqa: F821 [unreachable]
-                if callable(val):
-                    continue
-                try:
-                    iv = int(val)  # type: ignore[arg-type]
-                except (TypeError, ValueError):
-                    pass
-                else:
-                    _QT_CACHE[n] = _QFlag(iv, n)
+        enum_src = getattr(QTCORE, 'Qt', QTCORE)
 
-        if name in _QT_CACHE:
-            return _QT_CACHE[name]
+        # 1) Direct attribute on the Qt enum class (PyQt5 style).
+        if hasattr(enum_src, name):
+            return getattr(enum_src, name)
 
-        val = getattr(QtCore, name, None)  # type: ignore[arg-type] [unreachable]
-        if val is None or not callable(val):
+        # 2) QtCore module class type (QEvent, QKeySequence, ...).
+        if _pyqt_ver == '5':
+            val = getattr(QTCORE, name, None)
+            if val is not None:
+                return val
+        else:
+            # PyQt6: return a small wrapper for known class types whose event
+            # type enum is nested (see ``QEvent``).
+            if name == 'QEvent':
+                return _QEventProxy()
+
+        # 3) PyQt6 nested enum members (Qt.Key.Key_Escape).
+        for n in dir(enum_src):
+            if n.startswith('_'):
+                continue
             try:
-                iv = int(val)  # type: ignore[arg-type] [unreachable]
-                fl = _QFlag(iv, name)  # noqa: F821 [unreachable]
-                _QT_CACHE[name] = fl
-                return fl
+                enum_type = getattr(enum_src, n)
+            except AttributeError:
+                continue
+            members = getattr(enum_type, '__members__', None)
+            if members and name in members:
+                return members[name]
 
-            except (TypeError, ValueError):
-                pass
+        # 4) General QtCore class types.
+        val = getattr(QTCORE, name, None)
+        if val is not None:
+            return val
 
         raise AttributeError(f"Qt has no attribute {name!r}")
 
 
-Qt = QtEnumNamespace()  # type: ignore[var-annotated]
+class _QEventProxy:
+    """Proxy over PyQt6 ``QEvent`` that flattens ``QEvent.Type.*`` members so
+    legacy ``Qt.QEvent.ChildAdded`` access works."""
+
+    def __getattr__(self, name):
+        ev = getattr(QTCORE, 'QEvent')
+        # Prefer a direct member, else fall back to ``QEvent.Type``.
+        if hasattr(ev, name):
+            return getattr(ev, name)
+        return getattr(ev.Type, name)
 
 
-# QtWidgets proxy (replaces ``from PyQt5.QtWidgets import *``)
-class _WProxy(type(__import__('PyQt5.QtWidgets'))):  # noqa: F401 [return-value]
-    """Proxy to QtWidgets classes in both PyQt5 and PyQt6."""
-
-    def __getattr__(self, name):  # type: ignore[misc]
-        mod_name = 'PyQt6.QtWidgets' if _pyqt_ver == '6' else 'PyQt5.QtWidgets'
-        return getattr(__import__(mod_name), name)
-
-    def __dir__(self):
-        mod_name = 'PyQt6.QtWidgets' if _pyqt_ver == '6' else 'PyQt5.QtWidgets'
-        return dir(__import__(mod_name))
+Qt = QtEnumNamespace()
 
 
-_WidProx = _WProxy()  # type: ignore[var-annotated]
+# ---------------------------------------------------------------------------
+# exec / exec_ compatibility (patched lazily via a function)
+# ---------------------------------------------------------------------------
+def apply_qt_exec_compat():
+    """Patch Qt classes so both ``.exec()`` and ``.exec_()`` work identically.
 
-class QtWidgets(_WProxy):  # noqa: F821 [unreachable]
-    """Re-export QtWidgets proxy so VivisectION code can use ``QtWidgets.QMenu`` etc."""
-
-    pass
-
-
-# QApplication standalone (needed by ``QApplication(sys.argv)``)
-QApplication = _WidProx.QApplication if hasattr(_WidProx, 'QApplication') else None  # type: ignore[union-attr]
-
-
-# QtWebEngine proxy (may not be installed)
-class QtWebEngineProxy(type.__eq__):  # type: ignore[misc] [unreachable]
-    """Optional proxy to QtWebEngineWidgets module."""
-
-    def __init__(self):  # type: ignore[misc]
-        self._installed = False
-        self._mod = None
-
-    def _load(self):
-        if self._installed:
-            return True
-        try:
-            pname = 'PyQt5.QtWebEngineWidgets' if _pyqt_ver == '5' else 'PyQt6.QtWebEngineWidgets'
-            self._mod = __import__(pname)
-            self._installed = True
-            return True
-        except (ImportError, ModuleNotFoundError):
-            pass
-        return False
-
-    def __getattr__(self, name):  # type: ignore[misc]
-        if not self._load():
-            raise ImportError("QtWebEngineWidgets not installed")
-        return getattr(self._mod, name)  # type: ignore[attr-defined]
-
-    def __dir__(self):
-        if self._load():
-            return dir(self._mod)  # type: ignore[name-defined]
-        return ['QtWebEngineCore', 'QtWebEngineWidgets']
-
-
-# Install exec/exec_ compat early (before any QMenu instances are created)
-def apply_qt_exec_compat() -> None:
-    """Patch QtWidgets classes so both .exec() and .exec_() work identically."""
-    try:
-        WidMod = __import__('PyQt6.QtWidgets' if _pyqt_ver == '6' else 'PyQt5.QtWidgets')  # type: ignore[name-defined]
-    except (ImportError, ModuleNotFoundError):
-        return
-
-    for cls_name in ('QMenu',):
-        klass = getattr(WidMod, cls_name, None)
+    Qt5 kept the historical ``exec_`` name (since ``exec`` was a Python
+    keyword) and Qt6 renamed it to ``exec``.  We alias whichever one a given
+    binding lacks so VivisectION code can use either spelling.
+    """
+    for cls_name in ('QMenu', 'QDialog', 'QApplication'):
+        klass = getattr(QTWIDGETS, cls_name, None)
         if klass is None:
             continue
 
-        has_exec = hasattr(klass, 'exec')      # type: ignore[arg-type] [unreachable]
-        has_execp = hasattr(klass, 'exec_')     # type: ignore[arg-type] [unreachable]
+        has_exec = hasattr(klass, 'exec')
+        has_exec_ = hasattr(klass, 'exec_')
 
-        if not has_exec and has_execp:
-            orig_execp = klass.exec_  # type: ignore[attr-defined]
-            klass.exec = lambda self, *a, **kw: orig_execp(self, *a, **kw)       # noqa: B023 [unreachable]
-
-        elif has_exec and not has_execp:
-            orig_exec = klass.exec  # type: ignore[attr-defined]
-            klass.exec_ = lambda self, *a, **kw: orig_exec(self, *a, **kw)        # noqa: B023 [unreachable]
-
-
-apply_qt_exec_compat()
+        if not has_exec and has_exec_:
+            orig = klass.exec_
+            klass.exec = lambda self, *a, **kw: orig(self, *a, **kw)
+        elif has_exec and not has_exec_:
+            orig = klass.exec
+            klass.exec_ = lambda self, *a, **kw: orig(self, *a, **kw)
 
 
-### diagnostics
-_QVT = '?'
-try:
-    if _pyqt_ver == '5':  # type: ignore[name-defined]
-        import PyQt5.QtCore as __pyqt_core_5  # noqa: F401
-        _QVT = getattr(__pyqt_core_5, 'QT_VERSION_STR', '?')  # type: ignore[attr-defined]
-    else:
-        from PyQt6.QtCore import QT_VERSION as _PY_QT_V   # noqa: F401
-        _QVT = str(_PY_QT_V) if hasattr(QT_VERSION, '__str__') else '?'
-except Exception:  # noqa: E723 [bare-except]
-    pass
+# ---------------------------------------------------------------------------
+# QtWebEngine optional proxy (may not be installed)
+# ---------------------------------------------------------------------------
+class QtWebEngine:
+    """Lazy proxy to QtWebEngineWidgets so imports don't fail if missing."""
 
-__doc__: str = "PyQt compat shim (Qt {})".format(_QVT)
+    _mod = None
 
+    @classmethod
+    def _load(cls):
+        if cls._mod is not None:
+            return True
+        try:
+            pname = ('PyQt6.QtWebEngineWidgets' if _pyqt_ver == '6'
+                     else 'PyQt5.QtWebEngineWidgets')
+            cls._mod = __import__(pname, fromlist=['*'])
+            return True
+        except (ImportError, ModuleNotFoundError):
+            return False
+
+    @classmethod
+    def __getattr__(cls, name):
+        if not cls._load():
+            raise ImportError("QtWebEngineWidgets not installed")
+        return getattr(cls._mod, name)
+
+
+QWebEngine = QtWebEngine
+
+
+# ---------------------------------------------------------------------------
+# QApplication (standalone export)
+# ---------------------------------------------------------------------------
+QApplication = QTWIDGETS.QApplication
+
+
+# ---------------------------------------------------------------------------
+# Re-export commonly-used widget classes so plugin.py's import block works.
+# ---------------------------------------------------------------------------
+QToolBar = QTWIDGETS.QToolBar
+QLabel = QTWIDGETS.QLabel
+QPushButton = QTWIDGETS.QPushButton
+QTextEdit = QTWIDGETS.QTextEdit
+QPlainTextEdit = QTWIDGETS.QPlainTextEdit
+QWidget = QTWIDGETS.QWidget
+QInputDialog = QTWIDGETS.QInputDialog
+# QAction lives in QtGui (Qt6) / QtWidgets (Qt5).  Resolve per binding.
+QAction = getattr(QTWIDGETS, 'QAction', None) or getattr(QTGUI, 'QAction')
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics / docs
+# ---------------------------------------------------------------------------
+_QVT = getattr(QTCORE, 'QT_VERSION_STR',
+               str(getattr(QTCORE, 'QT_VERSION', '?')))
+
+__doc__ = "PyQt compat shim (Qt {} / binding {})".format(_QVT, _pyqt_ver)

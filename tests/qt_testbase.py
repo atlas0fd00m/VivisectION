@@ -11,16 +11,13 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 from unittest.mock import MagicMock
 
-# conftest has already installed the PyQt5->PyQt6 shim by the time this
+# conftest has already set the offscreen platform by the time this
 # module is imported during test collection, but be defensive in case it
 # is imported standalone.
 try:
     from PyQt6.QtWidgets import QApplication
 except Exception:  # pragma: no cover - exercised when Qt is missing
-    try:
-        from PyQt5.QtWidgets import QApplication
-    except Exception:
-        QApplication = None
+    QApplication = None
 
 _QAPP = None
 

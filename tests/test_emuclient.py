@@ -10,7 +10,7 @@ The module therefore cannot be imported normally; attempting to execute
 it raises ``SyntaxError``.  These tests document that bug.
 
 Because ``emuclient.py`` lives inside the ``viv_plugin`` package whose
-``__init__.py`` itself fails to import (PyQt5 / QToolBar), we load the file
+``__init__.py`` itself may fail to import (PyQt6 / QToolBar), we load the file
 directly via :mod:`importlib.util` so we isolate the *syntax* error from
 the package-level import problems.
 '''

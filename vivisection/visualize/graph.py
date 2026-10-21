@@ -1,3 +1,4 @@
+import logging
 import time
 import threading
 import functools
@@ -21,9 +22,11 @@ import vivisect.qt.memory as vq_memory
 import vivisect.qt.ctxmenu as vq_ctxmenu
 import vivisect.tools.graphutil as viv_graphutil
 
-from PyQt5 import Qt, QtCore, QtGui, QtWebEngine, QtWidgets
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import *
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QShortcut, QAction
+from PyQt6.QtWidgets import *
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 from envi.threads import firethread
 from vqt.main import idlethread, eatevents, workthread, vqtevent
@@ -31,6 +34,8 @@ from vqt.main import idlethread, eatevents, workthread, vqtevent
 from vqt.common import *
 from vivisect.const import *
 from envi.common import MIRE
+
+logger = logging.getLogger(__name__)
 
 class DirectedGraphCanvas(vq_memory.VivCanvasBase):
     paintUp = pyqtSignal()
@@ -54,9 +59,9 @@ class DirectedGraphCanvas(vq_memory.VivCanvasBase):
         return vq_memory.VivCanvasBase.event(self, evt)
 
     def eventFilter(self, src, evt):
-        if evt.type() == Qt.QEvent.Wheel:
+        if evt.type() == QtCore.QEvent.Type.Wheel:
             return self._wheelEvent(evt)
-        if evt.type() == Qt.QEvent.MouseMove:
+        if evt.type() == QtCore.QEvent.Type.MouseMove:
             # Intercept mouse movements because frickin qt broke those for our shift scrolling,
             # but return False so we don't block the event from propagating to other event handlers
             # (this was the cause of the edge lines not highlighting on mouse over)
@@ -66,7 +71,7 @@ class DirectedGraphCanvas(vq_memory.VivCanvasBase):
 
     def _wheelEvent(self, event):
         mods = QApplication.keyboardModifiers()
-        if mods == QtCore.Qt.ShiftModifier:
+        if mods == QtCore.Qt.KeyboardModifier.ShiftModifier:
             delta = event.angleDelta().y()
             factord = delta / 1000.0
             self.setZoomFactor(self.zoomFactor() + factord)
@@ -81,9 +86,10 @@ class DirectedGraphCanvas(vq_memory.VivCanvasBase):
 
     def _mouseMoveEvent(self, event):
         mods = QApplication.keyboardModifiers()
-        if mods == QtCore.Qt.ShiftModifier:
-            x = event.globalX()
-            y = event.globalY()
+        if mods == QtCore.Qt.KeyboardModifier.ShiftModifier:
+            pos = event.globalPosition().toPoint()
+            x = pos.x()
+            y = pos.y()
             if self.lastpos:
                 dx = -(x - self.lastpos[0])
                 dy = -(y - self.lastpos[1])
@@ -160,7 +166,7 @@ class DirectedGraphCanvas(vq_memory.VivCanvasBase):
         self.viewmenu.addAction("Paint Down", ACT(self.paintDown.emit))
         self.viewmenu.addAction("Paint Down until remerge", ACT(self.paintMerge.emit))
 
-        menu.exec_(event.globalPos())
+        menu.exec(event.globalPosition().toPoint())
 
     def _navExpression(self, expr):
         if self._canv_navcallback:
@@ -265,7 +271,7 @@ class DirectedGraphView(vq_hotkey.HotKeyMixin, e_qt_memory.EnviNavMixin, QWidget
         vwqgui.addEventCore(self)
         vwqgui.vivMemColorSignal.connect(self.mem_canvas._applyColorMap)
 
-        QtWidgets.QShortcut(QtGui.QKeySequence("Escape"), self, activated=self._hotkey_histback, context=3)
+        QShortcut(QtGui.QKeySequence("Escape"), self, activated=self._hotkey_histback, context=QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
         # TODO: Transition these to the above pattern (since escape/ctrl-c)
         # See: https://stackoverflow.com/questions/56890831/qwidget-cannot-catch-escape-backspace-or-c-x-key-press-events
@@ -312,7 +318,7 @@ class DirectedGraphView(vq_hotkey.HotKeyMixin, e_qt_memory.EnviNavMixin, QWidget
     ######  Render Tools Menu
     def rendToolsMenu(self, event):
         menu = self.getRendToolsMenu()
-        menu.exec_(self.mapToGlobal(self.rend_tools.pos()))
+        menu.exec(self.mapToGlobal(self.rend_tools.pos()))
 
     def getRendToolsMenu(self):
         menu = QMenu(parent=self.rend_tools)

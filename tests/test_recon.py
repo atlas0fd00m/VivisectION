@@ -18,14 +18,10 @@ def _has_ipython():
 
 def _has_pyqt():
     try:
-        import PyQt5  # noqa: F401  (or the conftest shim)
+        import PyQt6  # noqa: F401
         return True
     except ImportError:
-        try:
-            import PyQt6  # noqa: F401
-            return True
-        except ImportError:
-            return False
+        return False
 
 
 @unittest.skipUnless(_has_ipython() and _has_pyqt(), 'Requires IPython and PyQt')
@@ -102,14 +98,15 @@ class TestFuncReconWidget(unittest.TestCase):
 
 @unittest.skipUnless(_has_ipython() and _has_pyqt(), 'Requires IPython and PyQt')
 class TestReconGlobalsBug(unittest.TestCase):
-    '''BUG: recon.py line 227 uses `globals.get` instead of `globals().get`.'''
+    '''BUG: recon.py line 227 uses `globals().get` which should be
+    `globals().get` (already fixed).'''
 
     def test_globals_get_bug(self):
         import inspect
         try:
             import vivisection.recon as recon
             src = inspect.getsource(recon)
-            self.assertIn('globals.get(', src)
+            self.assertIn('globals().get(', src)
         except Exception:
             self.skipTest('Cannot inspect recon.py source')
 

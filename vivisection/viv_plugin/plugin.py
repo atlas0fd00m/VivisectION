@@ -33,12 +33,12 @@ import vivisection.viv_plugin.share as ionShare
 
 
 try:
-    #from PyQt5.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
-    from PyQt5 import QtCore
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    #from PyQt6.QtWidgets import QToolBar, QLabel, QPushButton, QTextEdit, QWidget, QInputDialog, QPlainTextEdit
+    from PyQt6 import QtCore
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
 except Exception as e:
-    print("not loading PyQt5: %r" % e)
+    print("not loading PyQt6: %r" % e)
 
 from vqt.main import idlethread
 from vqt.basics import VBox
@@ -706,7 +706,7 @@ def vivExtension(vw, vwgui):
 
     # Create a toolbar and add it to the GUI
     toolbar = IonToolbar(vw, vwgui)
-    vwgui.addToolBar(QtCore.Qt.TopToolBarArea, toolbar)
+    vwgui.addToolBar(QtCore.Qt.ToolBarArea.TopToolBarArea, toolbar)
 
     # Add a menu item
     vwgui.vqAddMenuField('&Plugins.&Ion.&PrintDiscoveredStats', vw.printDiscoveredStats, ())

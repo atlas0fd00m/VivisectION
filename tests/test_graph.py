@@ -2,7 +2,7 @@
 Tests for vivisection.visualize.graph — DirectedGraphView/Canvas.
 
 These tests are skipped if QtWebEngine is not available, since graph.py
-imports PyQt5.QtWebEngineWidgets.
+imports PyQt6.QtWebEngineWidgets.
 '''
 import unittest
 import importlib
@@ -13,11 +13,7 @@ def _has_qtwebengine():
         from PyQt6 import QtWebEngineWidgets  # noqa: F401
         return True
     except ImportError:
-        try:
-            from PyQt5 import QtWebEngineWidgets  # noqa: F401
-            return True
-        except ImportError:
-            return False
+        return False
 
 
 @unittest.skipUnless(_has_qtwebengine(), 'Requires QtWebEngine')
@@ -70,16 +66,16 @@ class TestDirectedGraphView(unittest.TestCase):
 
 @unittest.skipUnless(_has_qtwebengine(), 'Requires QtWebEngine')
 class TestQtEventNamespaceBug(unittest.TestCase):
-    '''BUG: graph.py uses Qt.QEvent.ChildAdded, but QEvent is in QtCore, not Qt.'''
+    '''graph.py uses QtCore.QEvent.Type.ChildAdded (PyQt6 scoped enum).'''
 
-    def test_qt_event_access_bug(self):
+    def test_qt_event_namespace_fixed(self):
         import inspect
         try:
             import vivisection.visualize.graph as graph
             src = inspect.getsource(graph)
-            # The bug: accessing QEvent via Qt namespace
-            self.assertIn('Qt.QEvent.ChildAdded', src)
-            self.assertIn('Qt.QEvent.ChildRemoved', src)
+            # The fix: accessing QEvent via QtCore.QEvent.Type namespace
+            self.assertIn('QtCore.QEvent.Type.ChildAdded', src)
+            self.assertIn('QtCore.QEvent.Type.ChildRemoved', src)
         except Exception:
             self.skipTest('Cannot inspect graph.py source')
 

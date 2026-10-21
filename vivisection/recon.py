@@ -16,7 +16,7 @@ import vqt.saveable as vq_save
 import vivisect.qt.views as vq_views
 import envi.qt.memory as e_q_memory
 
-from PyQt5.QtWidgets import QPlainTextEdit, QWidget, QLabel, QLineEdit
+from PyQt6.QtWidgets import QPlainTextEdit, QWidget, QLabel, QLineEdit
 from vqt.basics import HBox, VBox
 
 

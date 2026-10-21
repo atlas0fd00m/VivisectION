@@ -42,7 +42,7 @@ def initWorkspaceClient(vw, remotevw):
     vw.server.vprint('%s connection complete!' % uname)
 
     thr = threading.Thread(target=vw._clientThread)
-    thr.setDaemon(True)
+    thr.daemon = True
     thr.start()
 
     timeout = vw.config.viv.remote.wait_for_plat_arch

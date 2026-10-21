@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 dependencies = [
-    'vivisect>=1.0.8',
+    'vivisect>=1.1.0',
     'requests',
     'ipython',
     'psutil',

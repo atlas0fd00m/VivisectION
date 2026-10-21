@@ -28,6 +28,7 @@ import envi.archs.amd64 as e_amd64
 
 import vstruct
 import vivisect
+import vivisect.const as v_const
 import vivisect.cli as viv_cli
 import visgraph.pathcore as vg_path
 
@@ -547,7 +548,7 @@ def getMSCallConv(emu, tva=None, wintel32pref='stdcall'):
         tloc = emu.vw.getLocation(tva)
         if tloc is not None:
             tlva, tlsz, tltype, tltinfo = tloc
-            if tltype == vivisect.LOC_IMPORT:
+            if tltype == v_const.LOC_IMPORT:
                 impapi = emu.vw.getImpApi(tltinfo)
                 if impapi is not None:
                     rettyp, _, ccname, realname, args = impapi
@@ -2042,7 +2043,7 @@ def GetModuleHandleW(emu, op=None):
 
         moduleva = cconv.getReturnAddress(emu)
         mmap = emu.getMemoryMap(moduleva)
-        filename = mmap[vivisect.MAP_FNAME]
+        filename = mmap[v_const.MAP_FNAME]
 
     modulebase = emu.vw.getFileMeta(filename, "imagebase")
     logger.warning('  returning ImageBase of file %r: %r', filename, modulebase)
@@ -5257,7 +5258,7 @@ Note: almost anywhere "reg" is written, an expression can be used (not "writing"
 class SymbolikTraceAnalMon(vi_mon.AnalysisMonitor):
     def __init__(self, emu):
         self.emu = emu
-        self.sctx = vs_anal.getSymbolikAnalysContext(emu.vw)
+        self.sctx = vs_anal.getSymbolikAnalysisContext(emu.vw)
         self.xlate = self.sctx.getTranslator()
 
     def prehook(self, emu, op, starteip):

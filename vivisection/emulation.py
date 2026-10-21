@@ -343,8 +343,8 @@ class DaybreakEmulator:
                         # if lockModule, keep all emulation within this named file
                         # if notOtherNamed, don't emulate into another named file 
                         #   (ie. emulation into anonymous modules is fine).
-                        if (realself.lockModule and tgtfn != self.startmm[vivisect.MAP_FNAME])\
-                                or (realself.notOtherNamed and tgtfn not in ('', self.startmm[vivisect.MAP_FNAME])):
+                        if (realself.lockModule and tgtfn != self.startmm[v_const.MAP_FNAME])\
+                                or (realself.notOtherNamed and tgtfn not in ('', self.startmm[v_const.MAP_FNAME])):
                             # if we are at the edge of our depth... set _func_only to stop descent.
                             self._func_only = True
                             logger.info("Skipping call to 0x%x (out of bounds)", endeip)
@@ -416,7 +416,7 @@ def getFuncRecon(vw, funcva, maxhit=1):
     arch = envi.ARCH_DEFAULT
     loc = vw.getLocation(funcva)
     if loc:
-        arch = loc[vivisect.L_TINFO] & 0xffff0000
+        arch = loc[v_const.L_TINFO] & 0xffff0000
 
     emu = vw.getEmulator(va=funcva, arch=arch)
 
